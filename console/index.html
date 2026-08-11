@@ -1,0 +1,367 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KiddyPhone · Test Lab</title>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Lexend:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  /* SignalWire design tokens (dark theme) — colors are locked brand values */
+  :root {
+    --panel: #0e0e18;              /* bg-page */
+    --card: #181a28;               /* bg-surface */
+    --well: #222436;               /* bg-surface-raised */
+    --ink: #f0f0f4;                /* fg-default */
+    --ink-soft: #a0a0aa;           /* fg-muted */
+    --line: rgba(255,255,255,.12); /* border-default */
+    --coral: #F72A72;              /* sw-fuchsia: accents, eyebrows, emphasis */
+    --coral-soft: rgba(247,42,114,.10);
+    --teal: #044EF4;               /* sw-blue: structural borders, buttons, focus */
+    --teal-soft: rgba(4,78,244,.12);
+    --ok: #22c55e;
+    --bad: #ef4444;
+    --display: "Instrument Sans", sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+    --body: "Lexend", sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  html { background: var(--panel); }
+  body {
+    font-family: var(--body); color: var(--ink); background: var(--panel);
+    min-height: 100vh; padding: 0 20px 48px; max-width: 1080px; margin: 0 auto;
+  }
+  button { font: inherit; cursor: pointer; }
+  input, select { font: inherit; }
+  button:focus-visible, input:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+
+  header {
+    display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap;
+    padding: 20px 4px 14px; border-bottom: 2px solid var(--ink);
+  }
+  .brand { font-family: var(--display); font-weight: 700; font-size: 22px; letter-spacing: .06em; }
+  .brand .dot { color: var(--coral); }
+  .masthead-sub { font-family: var(--mono); font-size: 11px; color: var(--ink-soft); letter-spacing: .08em; text-transform: uppercase; }
+  .spacer { flex: 1; }
+
+  .lede { padding: 18px 4px 6px; max-width: 760px; }
+  .lede h1 { font-family: var(--display); font-weight: 700; font-size: 18px; line-height: 1.4; }
+  .lede h1 em { font-style: normal; color: var(--coral); }
+  .lede p { font-size: 13px; color: var(--ink-soft); margin-top: 8px; line-height: 1.55; }
+
+  .step { margin-top: 26px; }
+  .step-label {
+    font-family: var(--mono); font-size: 11px; letter-spacing: .14em; text-transform: uppercase;
+    font-weight: 700; color: var(--coral); display: flex; align-items: center; gap: 10px; margin-bottom: 10px;
+  }
+  .step-label .n {
+    width: 20px; height: 20px; border-radius: 50%; background: var(--teal); color: #fff;
+    display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600;
+  }
+
+  .space-row { display: flex; gap: 12px; flex-wrap: wrap; align-items: stretch; }
+  .space-card {
+    background: var(--card); border: 1px solid var(--line); border-radius: 5px;
+    padding: 12px 14px; min-width: 240px; text-align: left; position: relative;
+  }
+  .space-card.selected { border: 2px solid var(--teal); padding: 11px 13px; background: var(--teal-soft); }
+  .space-card .name { font-family: var(--display); font-weight: 600; font-size: 14px; }
+  .space-card .host { font-family: var(--mono); font-size: 11.5px; color: var(--ink-soft); margin-top: 2px; }
+  .space-card .meta { font-family: var(--mono); font-size: 10.5px; color: var(--ink-soft); margin-top: 8px; line-height: 1.6; }
+  .space-card .badge {
+    position: absolute; top: 10px; right: 10px; font-family: var(--mono); font-size: 9.5px;
+    letter-spacing: .1em; text-transform: uppercase; color: var(--teal);
+  }
+  .space-card .rm {
+    position: absolute; bottom: 8px; right: 10px; border: none; background: none;
+    font-family: var(--mono); font-size: 10px; color: var(--bad); text-decoration: underline; padding: 0;
+  }
+
+  details.connect { min-width: 280px; }
+  details.connect > summary {
+    list-style: none; cursor: pointer; height: 100%;
+    border: 1px dashed var(--ink-soft); border-radius: 5px; background: none;
+    display: flex; align-items: center; justify-content: center; padding: 12px 14px;
+    font-family: var(--mono); font-size: 12px; color: var(--ink-soft); min-height: 88px;
+  }
+  details.connect[open] > summary { display: none; }
+  .connect-form {
+    background: var(--card); border: 1px solid var(--line); border-radius: 5px; padding: 14px;
+    display: grid; gap: 8px;
+  }
+  .connect-form label { font-family: var(--mono); font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-soft); }
+  .connect-form input {
+    width: 100%; padding: 7px 9px; border: 1px solid rgba(255,255,255,.15); border-radius: 4px;
+    background: #2a2a2e; color: #fff; font-family: var(--mono); font-size: 12.5px;
+  }
+  .connect-form input:focus { outline: none; border-color: var(--teal); box-shadow: 0 0 0 3px rgba(4,78,244,.3); }
+  .connect-form .note { font-size: 11px; color: var(--ink-soft); line-height: 1.5; }
+  .connect-form .row { display: flex; gap: 8px; align-items: center; }
+
+  .mode-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; max-width: 760px; }
+  @media (max-width: 700px) { .mode-row { grid-template-columns: 1fr; } }
+  .mode-card {
+    background: var(--card); border: 1px solid var(--line); border-radius: 5px;
+    padding: 14px 16px; text-align: left; position: relative;
+  }
+  .mode-card.selected { border: 2px solid var(--teal); padding: 13px 15px; background: var(--teal-soft); }
+  .mode-card .tag { font-family: var(--mono); font-size: 10px; letter-spacing: .12em; color: var(--teal); text-transform: uppercase; }
+  .mode-card .name { font-family: var(--display); font-weight: 700; font-size: 15px; margin: 4px 0 6px; }
+  .mode-card p { font-size: 12px; color: var(--ink-soft); line-height: 1.5; }
+  .mode-card .reach { margin-top: 8px; font-family: var(--mono); font-size: 10.5px; color: var(--ink-soft); line-height: 1.6; }
+  .mode-card .lamp-row { position: absolute; top: 12px; right: 12px; display: flex; gap: 6px; align-items: center; font-family: var(--mono); font-size: 10px; color: var(--ink-soft); }
+  .lamp { width: 8px; height: 8px; border-radius: 50%; background: var(--ink-soft); display: inline-block; }
+  .lamp.on { background: var(--ok); }
+
+  .cell-row { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; max-width: 760px; }
+  .cell-row .field { flex: 1; min-width: 220px; }
+  .cell-row label { font-family: var(--mono); font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-soft); display: block; margin-bottom: 5px; }
+  .cell-row input {
+    width: 100%; padding: 9px 11px; border: 1px solid rgba(255,255,255,.15); border-radius: 4px;
+    background: #2a2a2e; color: #fff; font-family: var(--mono); font-size: 14px;
+  }
+  .cell-row input:focus { outline: none; border-color: var(--teal); box-shadow: 0 0 0 3px rgba(4,78,244,.3); }
+  .cell-note { font-size: 11.5px; color: var(--ink-soft); max-width: 760px; margin-top: 8px; line-height: 1.5; }
+
+  .btn {
+    font-family: var(--mono); font-size: 11.5px; letter-spacing: .04em; padding: 8px 16px;
+    border: 1px solid rgba(255,255,255,.15); border-radius: 4px; background: transparent; color: #fff;
+  }
+  .btn:hover { background: rgba(255,255,255,.06); }
+  .btn[disabled] { opacity: .4; cursor: not-allowed; }
+  .btn.primary { background: var(--teal); border-color: var(--teal); color: #fff; font-weight: 600; font-size: 13px; padding: 10px 22px; }
+  .btn.primary:hover { background: #0342cf; border-color: #0342cf; }
+
+  .launch { margin-top: 30px; padding: 16px; background: var(--well); border-radius: 5px; max-width: 760px;
+    display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+  .launch .summary { font-family: var(--mono); font-size: 11.5px; color: var(--ink-soft); flex: 1; min-width: 220px; line-height: 1.6; }
+  .status { font-family: var(--mono); font-size: 11.5px; margin-top: 10px; max-width: 760px; line-height: 1.6; white-space: pre-wrap; }
+  .status.err { color: var(--bad); }
+  .status.ok { color: var(--ok); }
+  .status a { color: var(--teal); }
+</style>
+</head>
+<body>
+
+<header>
+  <svg class="sw-mark" viewBox="0.00 0.00 1342.00 1528.00" aria-label="SignalWire" style="height:26px; width:auto;">
+    <path fill="#044ef4" d="M 551.23 5.32 C 587.71 9.54 619.84 26.47 639.40 58.35 C 654.08 82.30 662.11 112.89 658.32 140.58 C 654.81 166.19 642.08 189.00 623.95 207.45 Q 581.70 250.44 511.90 320.15 Q 359.55 472.30 202.28 627.03 Q 198.86 630.40 191.60 636.07 C 154.44 665.09 106.03 669.19 64.20 647.54 C 21.31 625.34 1.27 582.19 0.73 535.19 C 0.42 507.81 13.45 481.79 31.83 462.07 Q 34.91 458.76 47.74 445.98 Q 196.18 298.10 452.68 42.18 C 479.37 15.56 513.25 0.92 551.23 5.32 Z"/>
+    <path fill="#f72a72" d="M 1231.90 834.19 Q 1222.41 833.63 1217.50 833.49 Q 1166.47 832.06 1125.40 860.41 Q 1107.46 872.80 1092.82 888.57 Q 1076.30 906.38 1071.74 910.99 Q 1049.19 933.78 1023.79 958.57 A 0.55 0.55 0.0 0 1 1023.06 958.60 Q 1015.51 952.23 1015.02 951.74 Q 799.24 736.26 703.22 639.79 C 673.83 610.27 661.51 570.90 671.27 530.01 C 679.15 496.96 697.30 468.74 726.96 452.39 C 752.11 438.53 784.46 432.61 812.51 438.11 Q 844.35 444.35 868.76 468.60 Q 1032.69 631.51 1223.85 823.25 Q 1227.68 827.09 1232.13 833.80 A 0.25 0.25 0.0 0 1 1231.90 834.19 Z"/>
+    <path fill="#f72a72" d="M 96.20 687.43 A 0.16 0.16 0.0 0 1 96.31 687.16 Q 109.88 686.82 123.49 686.25 Q 181.95 683.82 222.94 642.18 Q 243.54 621.26 303.33 560.46 A 0.68 0.68 0.0 0 1 304.27 560.44 Q 311.78 567.32 314.91 570.42 Q 369.88 624.87 621.07 876.51 C 650.07 905.56 664.47 939.59 658.04 980.96 Q 655.51 997.21 648.59 1013.35 Q 629.04 1058.98 581.98 1075.71 C 545.63 1088.63 505.61 1086.80 474.21 1064.28 Q 467.19 1059.25 448.40 1040.51 Q 279.39 871.96 96.20 687.43 Z"/>
+    <path fill="#044ef4" d="M 1254.87 868.36 C 1301.06 888.47 1330.64 929.63 1326.40 981.25 Q 1325.32 994.52 1323.53 1003.26 Q 1318.60 1027.30 1304.85 1046.71 Q 1299.91 1053.69 1286.16 1067.41 Q 1076.08 1277.09 877.74 1474.49 Q 869.57 1482.61 863.22 1487.71 C 827.21 1516.62 778.88 1524.29 736.76 1503.84 C 705.31 1488.56 681.43 1459.88 672.57 1426.25 C 661.67 1384.90 674.54 1341.90 704.45 1311.43 Q 754.59 1260.36 806.06 1209.06 Q 962.02 1053.60 1114.87 903.02 Q 1131.54 886.60 1139.45 880.94 C 1174.04 856.23 1215.62 851.26 1254.87 868.36 Z"/>
+  </svg>
+  <div class="brand">KIDDYPHONE<span class="dot">·</span>TEST LAB</div>
+  <div class="masthead-sub">whitelist gating, live, on your space</div>
+  <div class="spacer"></div>
+  <div class="masthead-sub" id="gw-state">gateway ·</div>
+</header>
+
+<div class="lede">
+  <h1>One landing, two implementations. Connect a space, pick <em>RELAY</em> or <em>SWML</em>,
+  and run the same whitelist demo from your own cell phone.</h1>
+  <p>The demo space is preloaded and works out of the box. Connecting your own space stores the
+  token server-side only — it is validated with a read-only <code>sip_profile</code> probe and
+  never returned to this page.</p>
+</div>
+
+<section class="step">
+  <div class="step-label"><span class="n">1</span> choose a space</div>
+  <div class="space-row" id="spaces"></div>
+</section>
+
+<section class="step">
+  <div class="step-label"><span class="n">2</span> choose an implementation</div>
+  <div class="mode-row">
+    <button class="mode-card" id="mode-relay" data-mode="relay">
+      <span class="lamp-row" id="lamp-relay"><span class="lamp"></span><span>idle</span></span>
+      <div class="tag">realtime sdk</div>
+      <div class="name">RELAY Realtime</div>
+      <p>The Node app holds a WebSocket to SignalWire and decides on the live offer:
+      connect-before-answer, billing starts at the bridge.</p>
+      <div class="reach">Works from this laptop on any space — no inbound reachability needed.</div>
+    </button>
+    <button class="mode-card" id="mode-swml" data-mode="swml">
+      <span class="lamp-row" id="lamp-swml"><span class="lamp"></span><span>idle</span></span>
+      <div class="tag">webhook</div>
+      <div class="name">SWML</div>
+      <p>The space fetches an SWML document from a webhook at call time; the whitelist verdict
+      is rendered as the document itself.</p>
+      <div class="reach">Needs the space to reach this machine: set PUBLIC_URL (tunnel).
+      Static-script fallback: planned.</div>
+    </button>
+  </div>
+</section>
+
+<section class="step">
+  <div class="step-label"><span class="n">3</span> your cell phone</div>
+  <div class="cell-row">
+    <div class="field">
+      <label for="cell">test calls are placed from / to this handset</label>
+      <input id="cell" type="tel" placeholder="+1 555 555 0100" autocomplete="tel">
+    </div>
+  </div>
+  <p class="cell-note">The best evidence is a real handset: what your phone's screen shows
+  (ringing, connected, call timer) is the product behavior KiddyPhone promises. On the demo
+  space this defaults to the lab handset.</p>
+</section>
+
+<div class="launch">
+  <div class="summary" id="launch-summary">select a space and a mode</div>
+  <button class="btn primary" id="launch" disabled>Launch →</button>
+</div>
+<div class="status" id="status"></div>
+
+<script>
+  const state = { spaces: [], spaceId: null, mode: null, slots: {} };
+  const $ = (id) => document.getElementById(id);
+
+  async function api(path, opts) {
+    const res = await fetch(path, opts ? { headers: { 'content-type': 'application/json' }, ...opts } : undefined);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
+    return data;
+  }
+
+  function renderSpaces() {
+    const wrap = $('spaces');
+    wrap.innerHTML = '';
+    for (const s of state.spaces) {
+      const card = document.createElement('button');
+      card.className = 'space-card' + (state.spaceId === s.id ? ' selected' : '');
+      card.innerHTML = `
+        ${s.isDemo ? '<span class="badge">default</span>' : ''}
+        <div class="name"></div>
+        <div class="host"></div>
+        <div class="meta">sip domain ${s.sipDomain || 'probed on launch'}<br>token ${s.tokenHint || '—'}</div>
+        ${s.isDemo ? '' : '<button class="rm" data-rm="' + s.id + '">remove</button>'}`;
+      card.querySelector('.name').textContent = s.label;
+      card.querySelector('.host').textContent = s.spaceUrl;
+      card.addEventListener('click', (e) => {
+        if (e.target.dataset.rm) return;
+        state.spaceId = s.id;
+        $('cell').value = s.cell || '';
+        renderSpaces(); renderLaunch();
+      });
+      const rm = card.querySelector('.rm');
+      if (rm) rm.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        await api('/api/spaces/' + encodeURIComponent(s.id), { method: 'DELETE' });
+        if (state.spaceId === s.id) state.spaceId = null;
+        await loadSpaces();
+      });
+      wrap.appendChild(card);
+    }
+
+    const details = document.createElement('details');
+    details.className = 'connect';
+    details.innerHTML = `
+      <summary>+ connect your own space</summary>
+      <div class="connect-form">
+        <div><label for="f-label">label</label><input id="f-label" placeholder="acme production"></div>
+        <div><label for="f-space">space url</label><input id="f-space" placeholder="example.signalwire.com"></div>
+        <div><label for="f-project">project id</label><input id="f-project" placeholder="xxxxxxxx-xxxx-…"></div>
+        <div><label for="f-token">api token</label><input id="f-token" type="password" placeholder="PT…"></div>
+        <p class="note">Stored server-side in a mode-600 file, validated with a read-only
+        sip_profile request. Nothing on your space is modified by connecting.</p>
+        <div class="row">
+          <button class="btn" id="f-save">validate + save</button>
+          <span class="note" id="f-status"></span>
+        </div>
+      </div>`;
+    details.querySelector('#f-save').addEventListener('click', async () => {
+      const st = details.querySelector('#f-status');
+      st.textContent = 'probing sip_profile…';
+      try {
+        const out = await api('/api/spaces', {
+          method: 'POST',
+          body: JSON.stringify({
+            label: details.querySelector('#f-label').value.trim(),
+            spaceUrl: details.querySelector('#f-space').value.trim(),
+            projectId: details.querySelector('#f-project').value.trim(),
+            token: details.querySelector('#f-token').value.trim(),
+          }),
+        });
+        state.spaceId = out.space.id;
+        await loadSpaces();
+      } catch (e) {
+        st.textContent = String(e.message || e);
+      }
+    });
+    wrap.appendChild(details);
+  }
+
+  function renderSlots() {
+    for (const mode of ['relay', 'swml']) {
+      const slot = state.slots[mode];
+      const el = $('lamp-' + mode);
+      const running = slot && slot.running;
+      el.innerHTML = `<span class="lamp${running ? ' on' : ''}"></span><span>${running ? 'running' : 'idle'}</span>`;
+    }
+  }
+
+  function renderLaunch() {
+    document.querySelectorAll('.mode-card').forEach((c) =>
+      c.classList.toggle('selected', c.dataset.mode === state.mode));
+    const space = state.spaces.find((s) => s.id === state.spaceId);
+    const ok = space && state.mode;
+    $('launch').disabled = !ok;
+    $('launch-summary').textContent = ok
+      ? `${state.mode.toUpperCase()} on ${space.spaceUrl} · handset ${$('cell').value || '(none set)'}`
+      : 'select a space and a mode';
+  }
+
+  document.querySelectorAll('.mode-card').forEach((c) =>
+    c.addEventListener('click', () => { state.mode = c.dataset.mode; renderLaunch(); }));
+  $('cell').addEventListener('input', renderLaunch);
+
+  $('launch').addEventListener('click', async () => {
+    const st = $('status');
+    st.className = 'status';
+    st.textContent = 'launching ' + state.mode + '…';
+    try {
+      const out = await api('/api/launch', {
+        method: 'POST',
+        body: JSON.stringify({ spaceId: state.spaceId, mode: state.mode, cell: $('cell').value.trim() }),
+      });
+      state.slots[out.mode] = out;
+      renderSlots();
+      st.className = 'status ok';
+      st.innerHTML = 'running — <a href="' + out.url + '" target="_blank" rel="noopener">open the ' +
+        out.mode.toUpperCase() + ' console ↗</a>';
+      window.open(out.url, '_blank', 'noopener');
+    } catch (e) {
+      st.className = 'status err';
+      st.textContent = 'launch failed: ' + String(e.message || e);
+      await refreshState();
+      const slot = state.slots[state.mode];
+      if (slot && slot.logTail && slot.logTail.length) {
+        st.textContent += '\n' + slot.logTail.join('\n');
+      }
+    }
+  });
+
+  async function loadSpaces() {
+    const out = await api('/api/spaces');
+    state.spaces = out.spaces;
+    if (!state.spaceId && state.spaces.length) {
+      state.spaceId = state.spaces[0].id;
+      $('cell').value = state.spaces[0].cell || '';
+    }
+    renderSpaces(); renderLaunch();
+  }
+
+  async function refreshState() {
+    try {
+      const out = await api('/api/state');
+      state.slots = out.slots;
+      $('gw-state').textContent = 'gateway · 127.0.0.1:' + out.gateway.port;
+      renderSlots();
+    } catch {
+      $('gw-state').textContent = 'gateway · unreachable';
+    }
+  }
+
+  loadSpaces().then(refreshState);
+  setInterval(refreshState, 5000);
+</script>
+</body>
+</html>

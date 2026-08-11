@@ -1,0 +1,1039 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KiddyPhone · Line Test Console · RELAY</title>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Lexend:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  /* SignalWire design tokens (dark theme) — colors are locked brand values.
+     Blue #044EF4 is fills/borders only on dark; readable blue text is #6e9eff. */
+  :root {
+    --panel: #0e0e18;                  /* bg-page */
+    --card: #181a28;                   /* bg-surface */
+    --well: #222436;                   /* bg-surface-raised */
+    --ink: #f0f0f4;                    /* fg-default */
+    --ink-soft: #a0a0aa;               /* fg-muted */
+    --line: rgba(255,255,255,.12);     /* border-default */
+    --coral: #F72A72;                  /* sw-fuchsia: call events / kiddyphone accent */
+    --coral-soft: rgba(247,42,114,.12);
+    --teal: #6e9eff;                   /* app decisions (readable blue on dark) */
+    --teal-soft: rgba(4,78,244,.15);
+    --amber: #FFD700;                  /* billed time, and only billed time */
+    --amber-fill: #E8B14E;
+    --ok: #22c55e;
+    --bad: #ef4444;
+    --display: "Instrument Sans", sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+    --body: "Lexend", sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  html { background: var(--panel); }
+  body {
+    font-family: var(--body); color: var(--ink); background: var(--panel);
+    min-height: 100vh; padding: 0 20px 48px;
+  }
+  button { font: inherit; cursor: pointer; }
+  button:focus-visible, summary:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+
+  /* ── masthead ─────────────────────────────────────────── */
+  header {
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+    padding: 20px 4px 14px; border-bottom: 2px solid var(--ink);
+  }
+  .brand { font-family: var(--display); font-weight: 700; font-size: 22px; letter-spacing: .06em; }
+  .brand .dot { color: var(--coral); }
+  .masthead-sub { font-family: var(--mono); font-size: 11px; color: var(--ink-soft); letter-spacing: .08em; text-transform: uppercase; }
+  .spacer { flex: 1; }
+  .chip {
+    font-family: var(--mono); font-size: 11.5px; padding: 4px 10px; border: 1px solid var(--line);
+    border-radius: 3px; background: var(--card); display: inline-flex; gap: 6px; align-items: center;
+  }
+  .chip .lamp { width: 8px; height: 8px; border-radius: 50%; background: var(--ink-soft); }
+  .chip.ready .lamp { background: var(--ok); }
+  .chip.missing .lamp { background: var(--bad); }
+  .btn {
+    font-family: var(--mono); font-size: 11.5px; letter-spacing: .04em; padding: 5px 12px;
+    border: 1px solid var(--ink); border-radius: 3px; background: var(--card); color: var(--ink);
+  }
+  .btn:hover { background: var(--ink); color: var(--card); }
+  .btn[disabled] { opacity: .4; cursor: not-allowed; }
+  .btn:hover[disabled] { background: var(--card); color: var(--ink); }
+  .btn.primary { background: var(--ink); color: var(--card); }
+  .btn.primary:hover { background: var(--teal); border-color: var(--teal); }
+
+  /* ── thesis strip ─────────────────────────────────────── */
+  .thesis { display: grid; grid-template-columns: minmax(280px, 1.3fr) repeat(3, minmax(160px, 1fr)); gap: 14px; padding: 18px 4px; border-bottom: 1px solid var(--line); }
+  .thesis h1 { font-family: var(--display); font-weight: 700; font-size: 17px; line-height: 1.35; letter-spacing: .01em; }
+  .thesis h1 em { font-style: normal; color: var(--coral); }
+  .thesis p { font-size: 12.5px; color: var(--ink-soft); margin-top: 6px; line-height: 1.5; }
+  .promise { background: var(--card); border: 1px solid var(--line); border-radius: 4px; padding: 10px 12px; }
+  .promise .tag { font-family: var(--mono); font-size: 10px; color: var(--teal); letter-spacing: .12em; }
+  .promise .head { font-family: var(--display); font-weight: 600; font-size: 13px; margin: 3px 0 4px; }
+  .promise p { font-size: 11.5px; color: var(--ink-soft); line-height: 1.45; }
+  @media (max-width: 900px) { .thesis { grid-template-columns: 1fr 1fr; } }
+
+  /* ── layout ───────────────────────────────────────────── */
+  .cols { display: grid; grid-template-columns: 330px 1fr; gap: 20px; padding-top: 20px; align-items: start; }
+  @media (max-width: 900px) { .cols { grid-template-columns: 1fr; } }
+
+  /* ── guided cell-phone cards ──────────────────────────── */
+  .gchip {
+    font-family: var(--mono); font-size: 11px; padding: 5px 9px; border-radius: 3px;
+    margin-top: 6px; display: inline-block;
+  }
+  .gchip.ok { background: var(--teal-soft); color: var(--teal); border: 1px solid var(--teal); }
+  .gchip.bad { background: var(--coral-soft); color: var(--bad); border: 1px solid var(--bad); }
+  .gsteps { margin: 10px 0 4px; padding-left: 22px; display: grid; gap: 6px; }
+  .gsteps li { font-size: 12px; color: var(--ink-soft); line-height: 1.45; }
+  .gsteps li.active { color: var(--ink); font-weight: 600; }
+  .gsteps li.done { color: var(--ok); }
+  .gsteps li.done::marker { content: "✓ "; }
+  .gsteps li.fail { color: var(--bad); }
+  .g-count { font-family: var(--mono); color: var(--amber); }
+
+  /* ── scenario cards ───────────────────────────────────── */
+  .lineup { display: flex; flex-direction: column; gap: 10px; }
+  .lineup-label, .board-label {
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--ink-soft); margin-bottom: 2px;
+  }
+  .scenario { background: var(--card); border: 1px solid var(--line); border-radius: 4px; padding: 12px 12px 10px; border-left: 3px solid var(--line); }
+  .scenario.selected { border-left-color: var(--coral); }
+  .scenario.running { border-left-color: var(--amber-fill); }
+  .scenario .row1 { display: flex; align-items: baseline; gap: 8px; }
+  .scenario .friendly { font-family: var(--display); font-weight: 600; font-size: 13.5px; }
+  .scenario .tech { font-family: var(--mono); font-size: 10.5px; color: var(--ink-soft); margin-top: 2px; }
+  .scenario .proves { font-size: 11.5px; color: var(--ink-soft); line-height: 1.45; margin: 7px 0 9px; }
+  .scenario .actions { display: flex; gap: 8px; align-items: center; }
+  .scenario .verdict { font-family: var(--mono); font-size: 10.5px; }
+  .verdict.pass { color: var(--ok); } .verdict.fail { color: var(--bad); } .verdict.live { color: var(--amber); }
+  .checks { list-style: none; padding: 8px 0 0; display: none; }
+  .scenario.selected .checks { display: block; }
+  .checks li { font-family: var(--mono); font-size: 10.5px; line-height: 1.8; color: var(--ink-soft); }
+  .checks li::before { content: "○ "; }
+  .checks li.yes { color: var(--ok); } .checks li.yes::before { content: "● "; }
+  .checks li.no { color: var(--bad); } .checks li.no::before { content: "× "; }
+
+  /* ── the board: ladder + ledger ───────────────────────── */
+  .board { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+  .panel { background: var(--card); border: 1px solid var(--line); border-radius: 4px; padding: 14px 16px 16px; }
+  .panel h2 { font-family: var(--display); font-weight: 700; font-size: 13px; letter-spacing: .08em; text-transform: uppercase; margin-bottom: 2px; }
+  .panel .sub { font-family: var(--mono); font-size: 10.5px; color: var(--ink-soft); margin-bottom: 12px; }
+
+  .ladder { overflow-x: auto; }
+  .ladder-grid { display: grid; grid-template-columns: 62px 1fr 1fr 1fr; min-width: 560px; }
+  .lane-head {
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase;
+    text-align: center; padding-bottom: 8px; color: var(--ink-soft); border-bottom: 1px solid var(--line);
+    position: sticky; top: 0; background: var(--card);
+  }
+  .lane { position: relative; padding: 4px 8px; }
+  .lane::before { content: ""; position: absolute; top: 0; bottom: 0; left: 50%; width: 1px; background: var(--well); }
+  .tick { font-family: var(--mono); font-size: 10px; color: var(--ink-soft); text-align: right; padding: 8px 8px 0 0; }
+  .evt {
+    position: relative; z-index: 1; margin: 4px auto; width: max-content; max-width: 100%;
+    font-family: var(--mono); font-size: 10.5px; line-height: 1.4; padding: 3px 8px;
+    background: var(--card); border: 1px solid var(--line); border-radius: 3px; text-align: center;
+  }
+  .evt.caller { border-color: var(--coral); color: var(--coral); background: var(--coral-soft); }
+  .evt.app { border-color: var(--teal); color: var(--teal); background: var(--teal-soft); }
+  .evt.child { border-color: var(--ink-soft); color: var(--ink); }
+  .evt.moment { font-weight: 700; }
+  .evt.err { border-color: var(--bad); color: var(--bad); background: rgba(239,68,68,.12); }
+  .arrow { grid-column: 2 / 5; position: relative; height: 20px; margin: 2px 0; }
+  .arrow .wire { position: absolute; top: 50%; border-top: 1.5px dashed var(--ink-soft); }
+  .arrow.dial .wire { left: 16.6%; right: 50%; border-color: var(--coral); }
+  .arrow.connect .wire { left: 50%; right: 16.6%; border-color: var(--teal); border-top-style: solid; }
+  .arrow.answer .wire { left: 16.6%; right: 16.6%; border-color: var(--amber); border-top-style: solid; }
+  .arrow .cap { position: absolute; top: 50%; transform: translateY(-52%); font-size: 12px; }
+  .arrow.dial .cap { right: 50%; color: var(--coral); }
+  .arrow.connect .cap { right: 16.6%; color: var(--teal); }
+  .arrow.answer .cap { left: 16.4%; color: var(--amber); transform: translateY(-52%) scaleX(-1); }
+  .arrow .lbl {
+    position: absolute; top: -7px; left: 50%; transform: translateX(-50%);
+    font-family: var(--mono); font-size: 9.5px; letter-spacing: .06em; color: var(--ink-soft);
+    background: var(--card); padding: 0 6px;
+  }
+  .ladder-empty { font-family: var(--mono); font-size: 11px; color: var(--ink-soft); padding: 26px 8px; text-align: center; }
+
+  /* ── billing ledger ───────────────────────────────────── */
+  .leg { display: grid; grid-template-columns: 210px 1fr 150px; gap: 12px; align-items: center; padding: 8px 0; border-top: 1px dashed var(--well); }
+  .leg:first-of-type { border-top: 0; }
+  .leg .who { font-family: var(--mono); font-size: 10.5px; line-height: 1.5; overflow: hidden; text-overflow: ellipsis; }
+  .leg .who .kind { color: var(--ink-soft); }
+  .bar { position: relative; height: 18px; background: var(--well); border-radius: 2px; overflow: hidden; }
+  .bar .billed { position: absolute; top: 0; bottom: 0; right: 0; background: var(--amber-fill); }
+  .bar .bridge-mark { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--amber); }
+  .leg .money { font-family: var(--mono); font-size: 10.5px; text-align: right; }
+  .leg .money .charge { color: var(--amber); font-weight: 700; }
+  .leg .money .free { color: var(--ok); font-weight: 700; }
+  .ledger-note { font-size: 11px; color: var(--ink-soft); margin-top: 10px; }
+  .ledger-note b { color: var(--amber); }
+
+  /* ── raw log + shell ──────────────────────────────────── */
+  details.raw { margin-top: 4px; }
+  details.raw summary { font-family: var(--mono); font-size: 11px; color: var(--ink-soft); cursor: pointer; }
+  .rawlog { font-family: var(--mono); font-size: 10.5px; line-height: 1.6; background: #1e1e1f; color: #d4d4d8; border: 1px solid rgba(255,255,255,.07); padding: 10px 12px; border-radius: 4px; max-height: 260px; overflow: auto; white-space: pre-wrap; word-break: break-all; margin-top: 8px; }
+  .rules { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 8px; }
+  .rule { font-family: var(--mono); font-size: 10.5px; padding: 3px 9px; border: 1px solid var(--line); border-radius: 999px; color: var(--ink-soft); background: var(--card); }
+  .rule b { color: var(--bad); font-weight: 600; }
+</style>
+</head>
+<body>
+
+<header>
+  <svg viewBox="0.00 0.00 1342.00 1528.00" aria-label="SignalWire" style="height:24px; width:auto; align-self:center;">
+    <path fill="#044ef4" d="M 551.23 5.32 C 587.71 9.54 619.84 26.47 639.40 58.35 C 654.08 82.30 662.11 112.89 658.32 140.58 C 654.81 166.19 642.08 189.00 623.95 207.45 Q 581.70 250.44 511.90 320.15 Q 359.55 472.30 202.28 627.03 Q 198.86 630.40 191.60 636.07 C 154.44 665.09 106.03 669.19 64.20 647.54 C 21.31 625.34 1.27 582.19 0.73 535.19 C 0.42 507.81 13.45 481.79 31.83 462.07 Q 34.91 458.76 47.74 445.98 Q 196.18 298.10 452.68 42.18 C 479.37 15.56 513.25 0.92 551.23 5.32 Z"/>
+    <path fill="#f72a72" d="M 1231.90 834.19 Q 1222.41 833.63 1217.50 833.49 Q 1166.47 832.06 1125.40 860.41 Q 1107.46 872.80 1092.82 888.57 Q 1076.30 906.38 1071.74 910.99 Q 1049.19 933.78 1023.79 958.57 A 0.55 0.55 0.0 0 1 1023.06 958.60 Q 1015.51 952.23 1015.02 951.74 Q 799.24 736.26 703.22 639.79 C 673.83 610.27 661.51 570.90 671.27 530.01 C 679.15 496.96 697.30 468.74 726.96 452.39 C 752.11 438.53 784.46 432.61 812.51 438.11 Q 844.35 444.35 868.76 468.60 Q 1032.69 631.51 1223.85 823.25 Q 1227.68 827.09 1232.13 833.80 A 0.25 0.25 0.0 0 1 1231.90 834.19 Z"/>
+    <path fill="#f72a72" d="M 96.20 687.43 A 0.16 0.16 0.0 0 1 96.31 687.16 Q 109.88 686.82 123.49 686.25 Q 181.95 683.82 222.94 642.18 Q 243.54 621.26 303.33 560.46 A 0.68 0.68 0.0 0 1 304.27 560.44 Q 311.78 567.32 314.91 570.42 Q 369.88 624.87 621.07 876.51 C 650.07 905.56 664.47 939.59 658.04 980.96 Q 655.51 997.21 648.59 1013.35 Q 629.04 1058.98 581.98 1075.71 C 545.63 1088.63 505.61 1086.80 474.21 1064.28 Q 467.19 1059.25 448.40 1040.51 Q 279.39 871.96 96.20 687.43 Z"/>
+    <path fill="#044ef4" d="M 1254.87 868.36 C 1301.06 888.47 1330.64 929.63 1326.40 981.25 Q 1325.32 994.52 1323.53 1003.26 Q 1318.60 1027.30 1304.85 1046.71 Q 1299.91 1053.69 1286.16 1067.41 Q 1076.08 1277.09 877.74 1474.49 Q 869.57 1482.61 863.22 1487.71 C 827.21 1516.62 778.88 1524.29 736.76 1503.84 C 705.31 1488.56 681.43 1459.88 672.57 1426.25 C 661.67 1384.90 674.54 1341.90 704.45 1311.43 Q 754.59 1260.36 806.06 1209.06 Q 962.02 1053.60 1114.87 903.02 Q 1131.54 886.60 1139.45 880.94 C 1174.04 856.23 1215.62 851.26 1254.87 868.36 Z"/>
+  </svg>
+  <div>
+    <div class="brand">KIDDYPHONE <span class="dot">●</span> LINE TEST CONSOLE</div>
+    <div class="masthead-sub">connect-before-answer · @signalwire/realtime-api 4.2.1 · live calls on the demo space</div>
+  </div>
+  <div class="spacer"></div>
+  <span class="chip" id="topo-chip"><span class="lamp"></span><span id="topo-text">checking topology…</span></span>
+  <button class="btn" id="btn-setup">Build topology</button>
+  <button class="btn" id="btn-teardown">Tear down</button>
+  <button class="btn" id="btn-tests">Run 73 unit tests</button>
+</header>
+
+<section class="thesis">
+  <div>
+    <h1>The line is never answered by a server. It connects first, and the platform answers only <em>when the child picks up</em>.</h1>
+    <p>Issuing the connect on an unanswered leg acknowledges the offer (one offer instead of nineteen) and defers billing to the bridge. Each scenario below places a real call through the whitelist and shows the signaling and the money as they happen.</p>
+    <div class="rules">
+      <span class="rule"><b>never</b> call answer() in the flow</span>
+      <span class="rule"><b>never</b> hang up on a 409</span>
+      <span class="rule">compare error codes numerically</span>
+      <span class="rule">drain: unlisten → zero calls → disconnect</span>
+    </div>
+  </div>
+  <div class="promise">
+    <div class="tag">PROMISE P1</div>
+    <div class="head">Spam costs nothing</div>
+    <p>Billing starts at answer. Unanswered and declined calls show <span style="font-family:var(--mono)">billing_ms: null</span> — zero minutes, every leg.</p>
+  </div>
+  <div class="promise">
+    <div class="tag">PROMISE P2</div>
+    <div class="head">Blocked callers learn nothing</div>
+    <p>A declined caller's phone never shows connected. They get a busy-style failure and no timer ever starts.</p>
+  </div>
+  <div class="promise">
+    <div class="tag">PROMISE P3</div>
+    <div class="head">Answered means the child answered</div>
+    <p>The A-leg flips to answered at the child's pickup, so the call record reflects a real conversation.</p>
+  </div>
+</section>
+
+<div class="cols">
+  <div class="lineup">
+    <div class="lineup-label">The child's handset — lives in this page</div>
+    <div class="scenario" id="phone-panel" style="border-left-color: var(--coral)">
+      <div class="row1" style="justify-content:space-between; align-items:center;">
+        <span class="friendly">Web phone</span>
+        <span class="chip" id="wp-chip"><span class="lamp"></span><span id="wp-status">connecting…</span></span>
+      </div>
+      <div class="tech" id="wp-identity" style="margin-top:4px; word-break:break-all;"></div>
+      <div id="wp-callbox" style="display:none; margin-top:10px; padding:10px; border:1px solid var(--coral); border-radius:4px; background:var(--coral-soft);">
+        <div style="font-family:var(--display); font-weight:600; font-size:13px;" id="wp-callstate">Incoming call</div>
+        <div class="tech" id="wp-caller"></div>
+        <div style="display:flex; gap:8px; margin-top:8px;">
+          <button class="btn primary" id="wp-answer">Answer</button>
+          <button class="btn" id="wp-hangup">Hang up</button>
+        </div>
+      </div>
+      <div style="display:flex; gap:6px; margin-top:10px;">
+        <input id="wp-dial" placeholder="digits or sip:…" style="flex:1; font-family:var(--mono); font-size:11px; padding:4px 8px; border:1px solid var(--line); border-radius:3px; background:var(--card); color:var(--ink); min-width:0;">
+        <button class="btn" id="wp-call">Call</button>
+      </div>
+      <div style="display:flex; gap:6px; margin-top:6px; flex-wrap:wrap;">
+        <button class="btn" id="wp-preset-out" title="Dial out through the whitelist, like the child's ATA">Dial out as the child</button>
+        <button class="btn" id="wp-preset-in" title="This phone is not on the whitelist — see exactly what a declined caller experiences">Call in as a stranger</button>
+      </div>
+      <div class="proves" style="margin:8px 0 0;">This is a real registered SIP endpoint (SIP.js over WebSocket). Allowed calls ring here when it's the selected device; dialing out goes through the same whitelist as the ATA.</div>
+      <audio id="wp-audio" autoplay></audio>
+    </div>
+
+    <div class="lineup-label" style="margin-top:10px">Guided — test from your cell phone</div>
+    <div class="scenario gcard" id="gcard-allow" style="border-left-color: var(--ok)">
+      <div class="row1"><span class="friendly">A. Grandma calls the child — your cell plays grandma</span></div>
+      <div class="gchip ok" id="gchip-allow">Number <b class="g-cell">…</b> is whitelisted for this test</div>
+      <ol class="gsteps" id="gsteps-allow">
+        <li data-step="listen">Start the listener</li>
+        <li data-step="dial">As grandma, dial the child's line <b class="g-did">…</b> from <b class="g-cell">…</b></li>
+        <li data-step="lookup">Wait <span class="g-delay">…</span> for the whitelist lookup <span class="g-count" id="gcount-allow"></span></li>
+        <li data-step="answer">Answer the child's handset — the web phone above, in this page</li>
+        <li data-step="result">Bridged — grandma's timer starts at the child's pickup, and so does billing</li>
+      </ol>
+      <div class="actions">
+        <button class="btn primary" id="gstart-allow">Start</button>
+        <button class="btn" id="gstop-allow" style="display:none">Stop</button>
+        <span class="verdict" id="gverdict-allow"></span>
+      </div>
+    </div>
+    <div class="scenario gcard" id="gcard-deny" style="border-left-color: var(--bad)">
+      <div class="row1"><span class="friendly">B. A stranger calls — same cell, now off the list</span></div>
+      <div class="gchip bad" id="gchip-deny">Number <b class="g-cell">…</b> is <b>NOT</b> on the whitelist</div>
+      <ol class="gsteps" id="gsteps-deny">
+        <li data-step="listen">Start the listener</li>
+        <li data-step="dial">As the stranger, dial the child's line <b class="g-did">…</b> from <b class="g-cell">…</b></li>
+        <li data-step="lookup">Wait <span class="g-delay">…</span> for the whitelist lookup <span class="g-count" id="gcount-deny"></span></li>
+        <li data-step="result">The stranger's phone must never show Connected — the child's handset never rings, timer never starts, $0 billed</li>
+      </ol>
+      <div class="actions">
+        <button class="btn primary" id="gstart-deny">Start</button>
+        <button class="btn" id="gstop-deny" style="display:none">Stop</button>
+        <span class="verdict" id="gverdict-deny"></span>
+      </div>
+    </div>
+
+    <div class="lineup-label" style="margin-top:10px">Child's phone — who rings on an allowed call</div>
+    <div class="scenario" id="device-panel" style="border-left-color: var(--teal)">
+      <label style="display:flex; gap:8px; align-items:center; font-family:var(--mono); font-size:11px;">
+        <input type="radio" name="device" value="web" id="dev-web" checked>
+        this page's web phone
+      </label>
+      <label style="display:flex; gap:8px; align-items:center; font-family:var(--mono); font-size:11px; margin-top:6px;">
+        <input type="radio" name="device" value="sim" id="dev-sim">
+        simulator — answers itself after 3s
+      </label>
+      <label style="display:flex; gap:8px; align-items:center; font-family:var(--mono); font-size:11px; margin-top:6px;">
+        <input type="radio" name="device" value="real" id="dev-real">
+        other SIP device:
+        <select id="dev-select" style="font:inherit; max-width:150px;"></select>
+      </label>
+      <div class="tech" id="dev-uri" style="margin-top:8px; word-break:break-all;"></div>
+      <div class="proves" style="margin:7px 0 0;">Scenarios 1, 2 and 6 ring the selected device. Scenario 4 dials the real DID, which lands on the simulator either way.</div>
+    </div>
+    <div class="lineup-label" style="margin-top:10px">Whitelist lookup time</div>
+    <div class="scenario" id="auth-panel" style="border-left-color: var(--amber)">
+      <label style="display:flex; gap:8px; align-items:center; font-family:var(--mono); font-size:11px;">
+        the check takes
+        <select id="auth-delay" style="font:inherit;">
+          <option value="1500" selected>1.5s — KiddyPhone's stated time</option>
+          <option value="4000">4s — edge of the first re-offer</option>
+          <option value="10000">10s — two re-offers land mid-check</option>
+          <option value="20000">20s — deep re-offer stress test</option>
+        </select>
+      </label>
+      <div class="proves" style="margin:7px 0 0;">Past ~5s the platform re-delivers the unacknowledged call while the check is still running. The guards must collapse the duplicates: one lookup, one connect or one decline, no dropped call.</div>
+    </div>
+    <div class="lineup-label" style="margin-top:10px">Automated scenarios — SDK-placed calls, the regression harness</div>
+    <!-- cards injected -->
+  </div>
+
+  <div class="board">
+    <section class="panel">
+      <h2>Signal ladder</h2>
+      <div class="sub" id="ladder-sub">select a scenario to see its last recorded run, or place a new call</div>
+      <div class="ladder">
+        <div class="ladder-grid" id="ladder">
+          <div class="lane-head">time</div>
+          <div class="lane-head" style="color:var(--coral)">caller</div>
+          <div class="lane-head" style="color:var(--teal)">platform · app</div>
+          <div class="lane-head">child</div>
+        </div>
+        <div class="ladder-empty" id="ladder-empty">no events yet</div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Billing ledger</h2>
+      <div class="sub">per leg, from /api/voice/logs — the hollow part of each bar existed but was free; only the <b style="color:var(--amber)">amber window after the bridge</b> is billed</div>
+      <div id="ledger"><div class="ladder-empty">no call records yet</div></div>
+      <div class="ledger-note" id="ledger-note"></div>
+    </section>
+
+    <section class="panel">
+      <h2>Console output</h2>
+      <div class="sub">raw event stream, setup/teardown and unit-test output</div>
+      <details class="raw" open>
+        <summary>show</summary>
+        <div class="rawlog" id="rawlog">idle</div>
+      </details>
+    </section>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+// ── scenario definitions (mirror live/smoke.mjs rows) ────────────────────────
+const SCENARIOS = [
+  { row: '1', friendly: 'Grandma calls, the child picks up', tech: 'inbound allow · SIP → SIP',
+    proves: 'A whitelisted caller rings the child. The app never answers; the platform answers the caller at the child’s pickup, and only that window is billed.',
+    checks: [
+      ['offers contained: fast check → 1 offer; slow check → duplicates collapse, no drop', (s) =>
+        (s.authDelayMs ?? 1500) <= 4000
+          ? s.summary && s.summary.offers === 1 && s.summary.offerCallIds === 1
+          : s.summary && s.summary.offers >= 2 && s.bridged === true && !s.handlerFailed],
+      ['whitelist allowed the caller', (s) => s.decision === true],
+      ['caller answered at child pickup', (s) => s.callerAnswered === true && s.bridged === true],
+      ['ringing was free; bridge window billed', (s) => s.cdrBilledPartial === true],
+    ]},
+  { row: '2', friendly: 'Grandma calls, nobody picks up', tech: 'inbound allow · child never answers',
+    proves: 'The child’s line rings out. The connect fails with noAnswer, the caller is released, and no leg bills a single millisecond.',
+    checks: [
+      ['offers contained for the check time chosen', (s) =>
+        (s.authDelayMs ?? 1500) <= 4000 ? s.summary && s.summary.offers === 1 : s.summary && !s.handlerFailed],
+      ['connect failed with noAnswer', (s) => s.noAnswer === true],
+      ['caller never answered', (s) => s.callerAnswered === false],
+      ['every leg billed $0 / null', (s) => s.cdrAllFree === true],
+    ]},
+  { row: '3', friendly: 'A stranger calls', tech: 'inbound deny · silent decline',
+    proves: 'A caller not on the whitelist is declined on the unanswered leg. Their phone never shows connected and they learn nothing about the line.',
+    checks: [
+      ['whitelist denied the caller', (s) => s.decision === false],
+      ['declined without answering', (s) => s.callerReason === 'decline'],
+      ['no connected state, no timer', (s) => s.callerAnswered === false],
+      ['zero billing', (s) => s.cdrAllFree === true],
+    ]},
+  { row: '4', friendly: 'The child dials grandma’s number', tech: 'outbound allow · ATA digits → PSTN',
+    proves: 'The ATA sends digits as a SIP user. The app reads them as a phone number, checks the whitelist, and dials the real PSTN leg — billing starts at the bridge there too.',
+    checks: [
+      ['digits normalized to E.164 and allowed', (s) => s.decision === true],
+      ['bridged via a real PSTN leg', (s) => s.bridged === true && s.cdrHasPstn === true],
+      ['carrier billed only the bridge window', (s) => s.cdrBilledPartial === true],
+    ]},
+  { row: '5', friendly: 'The child dials a stranger', tech: 'outbound deny',
+    proves: 'A destination not on the whitelist is declined before any dial happens. Nothing rings anywhere.',
+    checks: [
+      ['whitelist denied the destination', (s) => s.decision === false],
+      ['declined without dialing out', (s) => s.callerReason === 'decline'],
+      ['zero billing', (s) => s.cdrAllFree === true],
+    ]},
+  { row: '6', friendly: 'A real phone number calls in', tech: 'inbound allow · PSTN → SIP',
+    proves: 'A carrier call arrives on a real DID. Same flow, and the carrier CDR itself shows billing starting at the bridge with the app never answering.',
+    checks: [
+      ['PSTN caller allowed as E.164', (s) => s.decision === true],
+      ['caller answered at child pickup', (s) => s.callerAnswered === true && s.bridged === true],
+      ['carrier billed only the bridge window', (s) => s.cdrBilledPartial === true && s.cdrHasPstn === true],
+    ]},
+];
+
+// ── state ────────────────────────────────────────────────────────────────────
+let selected = null;          // row string
+let busy = false;
+const runs = {};              // row -> { events: [], cdrs: [], live: bool }
+
+const $ = (sel) => document.querySelector(sel);
+const lineup = $('.lineup');
+
+// ── scenario cards ───────────────────────────────────────────────────────────
+// ── child device selection ───────────────────────────────────────────────────
+let sipDomain = null;
+let webphone = null; // filled by initWebphone
+function childUri() {
+  if (document.querySelector('#dev-sim').checked) return null;
+  if (document.querySelector('#dev-web').checked) {
+    return webphone && sipDomain ? `sip:${webphone.username}@${sipDomain}` : null;
+  }
+  const user = document.querySelector('#dev-select').value;
+  return user && sipDomain ? `sip:${user}@${sipDomain}` : null;
+}
+function updateDevUri() {
+  const uri = childUri();
+  document.querySelector('#dev-uri').textContent = uri ? `rings ${uri}` : 'rings the pwpoc_child simulator context';
+}
+(async () => {
+  const res = await fetch('/api/devices');
+  const d = await res.json();
+  sipDomain = d.domain;
+  const sel = document.querySelector('#dev-select');
+  sel.innerHTML = d.endpoints.filter((u) => u !== 'pwpoc-webphone')
+    .map((u) => `<option ${u === 'yaddayaddangrok' ? 'selected' : ''}>${u}</option>`).join('');
+  updateDevUri();
+})();
+document.querySelectorAll('#device-panel input, #dev-select').forEach((el) =>
+  el.addEventListener('change', updateDevUri)
+);
+
+// ── the web phone: a real SIP endpoint living in this page ───────────────────
+const wp = {
+  el: {
+    chip: $('#wp-chip'), status: $('#wp-status'), id: $('#wp-identity'),
+    box: $('#wp-callbox'), state: $('#wp-callstate'), caller: $('#wp-caller'),
+    answer: $('#wp-answer'), hangup: $('#wp-hangup'),
+    dial: $('#wp-dial'), call: $('#wp-call'),
+  },
+  su: null, ringing: false, ringOsc: null,
+};
+function wpStatus(text, cls) {
+  wp.el.status.textContent = text;
+  wp.el.chip.classList.remove('ready', 'missing');
+  if (cls) wp.el.chip.classList.add(cls);
+}
+function wpShowCall(state, caller) {
+  wp.el.box.style.display = 'block';
+  wp.el.state.textContent = state;
+  wp.el.caller.textContent = caller || '';
+}
+function wpHideCall() { wp.el.box.style.display = 'none'; stopRing(); }
+function startRing() {
+  try {
+    const ctx = new AudioContext();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.frequency.value = 440; gain.gain.value = 0;
+    osc.connect(gain).connect(ctx.destination); osc.start();
+    // classic 2s-on/4s-off ring cadence, gently
+    const cadence = setInterval(() => {
+      gain.gain.setValueAtTime(0.08, ctx.currentTime);
+      gain.gain.setValueAtTime(0, ctx.currentTime + 1.6);
+    }, 4000);
+    gain.gain.setValueAtTime(0.08, ctx.currentTime);
+    gain.gain.setValueAtTime(0, ctx.currentTime + 1.6);
+    wp.ringOsc = { ctx, cadence };
+  } catch { /* audio may need a user gesture first; visual ring still shows */ }
+}
+function stopRing() {
+  if (wp.ringOsc) { clearInterval(wp.ringOsc.cadence); wp.ringOsc.ctx.close().catch(() => {}); wp.ringOsc = null; }
+}
+async function initWebphone() {
+  const res = await fetch('/api/webphone');
+  if (!res.ok) { wpStatus('not provisioned — build topology', 'missing'); return; }
+  const cfg = await res.json();
+  webphone = cfg;
+  wp.el.id.textContent = `sip:${cfg.username}@${cfg.domain} · via ${cfg.wsServer}`;
+  updateDevUri();
+  const { Web } = await import('/vendor/sipjs/index.js');
+  wp.su = new Web.SimpleUser(cfg.wsServer, {
+    aor: `sip:${cfg.username}@${cfg.domain}`,
+    userAgentOptions: {
+      authorizationUsername: cfg.username,
+      authorizationPassword: cfg.password,
+      displayName: 'KiddyPhone Child',
+    },
+    media: { remote: { audio: $('#wp-audio') } },
+    delegate: {
+      onCallReceived: () => {
+        const from = wp.su.session?.remoteIdentity;
+        wpShowCall('Incoming call', from ? `${from.displayName || ''} <${from.uri?.toString?.() || ''}>`.trim() : '');
+        wp.el.answer.style.display = '';
+        wp.ringing = true;
+        startRing();
+      },
+      onCallAnswered: () => { wp.ringing = false; stopRing(); wpShowCall('On a call'); wp.el.answer.style.display = 'none'; },
+      onCallHangup: () => { wp.ringing = false; wpHideCall(); },
+      onRegistered: () => wpStatus('registered', 'ready'),
+      onUnregistered: () => wpStatus('unregistered', 'missing'),
+      onServerDisconnect: () => wpStatus('disconnected — reload to retry', 'missing'),
+    },
+  });
+  try {
+    wpStatus('connecting…');
+    await wp.su.connect();
+    wpStatus('registering…');
+    await wp.su.register();
+  } catch (e) {
+    wpStatus(`failed: ${String(e?.message || e).slice(0, 60)}`, 'missing');
+  }
+}
+// Ask for the microphone ourselves first: the browser prompt can outlive the
+// click, and a second click mid-prompt hits SIP.js in the Establishing state.
+async function primeMic() {
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  stream.getTracks().forEach((t) => t.stop());
+}
+let answering = false;
+wp.el.answer.addEventListener('click', async () => {
+  if (answering) return;
+  answering = true;
+  wp.el.answer.disabled = true;
+  wp.el.answer.textContent = 'Answering…';
+  try {
+    await primeMic();
+    await wp.su.answer();
+  } catch (e) {
+    wpShowCall('Answer failed — allow the microphone and try again', String(e?.message || e).slice(0, 90));
+  } finally {
+    answering = false;
+    wp.el.answer.disabled = false;
+    wp.el.answer.textContent = 'Answer';
+  }
+});
+wp.el.hangup.addEventListener('click', async () => {
+  try { wp.ringing ? await wp.su.decline() : await wp.su.hangup(); } catch { /* already gone */ }
+  wpHideCall();
+});
+wp.el.call.addEventListener('click', async () => {
+  let target = wp.el.dial.value.trim();
+  if (!target) return;
+  if (!/^sips?:/.test(target)) {
+    // bare digits dial like the ATA: through the outbound whitelist app
+    target = `sip:${target.replace(/[^\d+]/g, '')}@demo-pwpoc-outbound.dapp.signalwire.com`;
+  }
+  try {
+    wpShowCall('Calling…', target);
+    wp.el.answer.style.display = 'none';
+    await primeMic();
+    await wp.su.call(target);
+  } catch (e) {
+    wpShowCall('Call failed', String(e?.message || e).slice(0, 90));
+  }
+});
+$('#wp-preset-out').addEventListener('click', () => {
+  wp.el.dial.value = '12083799823'; // the whitelisted DID — the child dialing grandma
+  wp.el.call.click();
+});
+$('#wp-preset-in').addEventListener('click', () => {
+  // this phone is NOT whitelisted: watch the decline from the caller's side
+  wp.el.dial.value = 'sip:child@demo-pwpoc-inbound.dapp.signalwire.com';
+  wp.el.call.click();
+});
+initWebphone();
+
+for (const sc of SCENARIOS) {
+  const card = document.createElement('div');
+  card.className = 'scenario';
+  card.id = `sc-${sc.row}`;
+  card.innerHTML = `
+    <div class="row1"><span class="friendly">${sc.row}. ${sc.friendly}</span></div>
+    <div class="tech">${sc.tech}</div>
+    <div class="proves">${sc.proves}</div>
+    <div class="actions">
+      <button class="btn primary" data-run="${sc.row}">Place call</button>
+      <span class="verdict" id="verdict-${sc.row}"></span>
+    </div>
+    <ul class="checks" id="checks-${sc.row}">
+      ${sc.checks.map((c, i) => `<li id="check-${sc.row}-${i}">${c[0]}</li>`).join('')}
+    </ul>`;
+  card.addEventListener('click', () => selectScenario(sc.row));
+  lineup.appendChild(card);
+}
+
+function selectScenario(row) {
+  selected = row;
+  document.querySelectorAll('.scenario').forEach((el) => el.classList.remove('selected'));
+  $(`#sc-${row}`).classList.add('selected');
+  if (!runs[row] || !runs[row].live) loadHistory(row);
+  else render(row);
+}
+
+async function loadHistory(row) {
+  const res = await fetch(`/api/history/${row}`);
+  const data = await res.json();
+  runs[row] = { events: data.events, cdrs: data.cdrs, live: false };
+  $('#ladder-sub').textContent = data.events.length
+    ? `scenario ${row} — last recorded run (from live/row${row}.log)`
+    : `scenario ${row} — not run yet`;
+  render(row);
+}
+
+// ── derive check-state from events ───────────────────────────────────────────
+function derive(row) {
+  const r = runs[row] || { events: [], cdrs: [] };
+  const s = { decision: null, callerAnswered: null, callerReason: null, bridged: false, noAnswer: false, summary: null, authDelayMs: 1500, handlerFailed: false };
+  for (const e of r.events) {
+    if (e.evt === 'row-start' && e.authDelayMs != null) s.authDelayMs = e.authDelayMs;
+    if (e.evt.startsWith('app:error:handler failed')) s.handlerFailed = true;
+    if (e.evt === 'app:decision') s.decision = e.allowed;
+    if (e.evt === 'caller-answered') s.callerAnswered = true;
+    if (e.evt === 'caller-dial-failed') {
+      s.callerAnswered = false;
+      const m = String(e.error || '').match(/"reason\\?":\\?"(\w+)"/) || String(e.error || '').match(/"reason":"(\w+)"/);
+      s.callerReason = m ? m[1] : null;
+    }
+    if (e.evt === 'app:bridged') s.bridged = true;
+    if (e.evt.startsWith('app:error:connect failed') && /noAnswer/.test(JSON.stringify(e))) s.noAnswer = true;
+    if (e.evt === 'row-summary') s.summary = e;
+  }
+  const cdrs = r.cdrs || [];
+  s.cdrAllFree = cdrs.length > 0 && cdrs.every((c) => !c.billing_ms);
+  s.cdrBilledPartial = cdrs.some((c) => c.billing_ms > 0 && c.billing_ms < c.duration_ms);
+  s.cdrHasPstn = cdrs.some((c) => c.type === 'relay_pstn_call');
+  return s;
+}
+
+// ── ladder rendering ─────────────────────────────────────────────────────────
+const LANES = { caller: 2, app: 3, child: 4 };
+function laneFor(e) {
+  if (e.evt.startsWith('caller') || e.evt === 'aleg-state' || e.evt === 'talking') return 'caller';
+  if (e.evt.startsWith('child')) return 'child';
+  if (e.evt.startsWith('app') || e.evt === 'offer') return 'app';
+  return null;
+}
+function labelFor(e) {
+  switch (e.evt) {
+    case 'caller-dialing': return { text: `dials ${short(e.to)}`, cls: 'caller' };
+    case 'offer': return { text: `offer · leg created (${short(e.from)})`, cls: 'app' };
+    case 'app:decision': return { text: e.allowed ? `whitelist: ALLOW ${short(e.identity)}` : `whitelist: DENY ${short(e.identity)}`, cls: 'app moment' };
+    case 'app:bridged': return { text: 'bridged — platform answers the caller', cls: 'app moment' };
+    case 'app:connect already in flight, standing down': return { text: '409 — standing down, no hangup', cls: 'app' };
+    case 'child-offer': return { text: `line rings (${short(e.to)})`, cls: 'child' };
+    case 'child-answered': return { text: 'child picks up', cls: 'child moment' };
+    case 'child-ignoring': return { text: 'nobody home — ringing out', cls: 'child' };
+    case 'child-state': return { text: `child leg: ${e.state}`, cls: 'child' };
+    case 'aleg-state': return { text: `caller leg: ${e.state}`, cls: e.state === 'answered' ? 'caller moment' : 'caller' };
+    case 'caller-answered': return { text: `caller hears “hello” (+${(e.afterMs / 1000).toFixed(1)}s after dialing)`, cls: 'caller moment' };
+    case 'caller-dial-failed': return { text: `dial failed: ${reasonOf(e)}`, cls: 'caller err' };
+    case 'talking': return { text: `talking ${(e.forMs / 1000).toFixed(0)}s`, cls: 'caller' };
+    case 'caller-hanging-up': return { text: 'caller hangs up', cls: 'caller' };
+    default:
+      if (e.evt.startsWith('app:error')) return { text: e.evt.replace('app:error:', '') + (e.message ? ` — ${String(e.message).slice(0, 60)}` : ''), cls: 'app err' };
+      if (e.evt.startsWith('app:debug:hangup absorbed')) return { text: `cleanup hangup absorbed (code ${e.code})`, cls: 'app' };
+      return null;
+  }
+}
+function arrowFor(e) {
+  if (e.evt === 'caller-dialing') return { cls: 'dial', lbl: 'INVITE', cap: '►' };
+  if (e.evt === 'child-offer') return { cls: 'connect', lbl: 'connect (leg unanswered)', cap: '►' };
+  if (e.evt === 'app:bridged') return { cls: 'answer', lbl: 'answered at the bridge · billing starts', cap: '►' };
+  return null;
+}
+const short = (s) => typeof s === 'string' ? s.replace(/^sips?:/, '').split('@')[0].slice(0, 24) : '';
+// ledger form: keep enough host to tell the legs apart (user@demo-pwpoc-inbound)
+const addr = (s) => {
+  if (typeof s !== 'string') return '';
+  const bare = s.replace(/^sips?:/, '');
+  const [user, host] = bare.split('@');
+  return host ? `${user}@${host.split('.')[0]}` : bare;
+};
+const reasonOf = (e) => { const m = String(e.error || '').match(/"reason":"(\w+)"/); return m ? m[1] : 'failed'; };
+
+function render(row) {
+  const r = runs[row] || { events: [], cdrs: [] };
+  const grid = $('#ladder');
+  grid.querySelectorAll('.tick, .evt, .arrow, .lane').forEach((el) => el.remove());
+  $('#ladder-empty').style.display = r.events.length ? 'none' : 'block';
+
+  for (const e of r.events) {
+    if (['row-start', 'row-summary', 'cdrs', 'cdr', 'row-done', 'draining', 'observed-from-recorded', 'child-sim-ready', 'app:listening'].includes(e.evt)) continue;
+    const lane = laneFor(e);
+    const label = labelFor(e);
+    if (!lane || !label) continue;
+
+    const arrow = arrowFor(e);
+    if (arrow) {
+      const tickA = document.createElement('div'); tickA.className = 'tick'; grid.appendChild(tickA);
+      const a = document.createElement('div');
+      a.className = `arrow ${arrow.cls}`;
+      a.innerHTML = `<span class="wire"></span><span class="cap">${arrow.cap}</span><span class="lbl">${arrow.lbl}</span>`;
+      grid.appendChild(a);
+    }
+    const tick = document.createElement('div');
+    tick.className = 'tick';
+    tick.textContent = `+${(e.ms / 1000).toFixed(2)}s`;
+    grid.appendChild(tick);
+    for (let col = 2; col <= 4; col++) {
+      const cell = document.createElement('div');
+      cell.className = 'lane';
+      if (LANES[lane] === col) {
+        const chip = document.createElement('div');
+        chip.className = `evt ${label.cls}`;
+        chip.textContent = label.text;
+        cell.appendChild(chip);
+      }
+      grid.appendChild(cell);
+    }
+  }
+
+  renderLedger(row);
+  renderChecks(row);
+  const raw = r.events.map((e) => JSON.stringify(e)).join('\n');
+  if (raw) $('#rawlog').textContent = raw;
+  $('#rawlog').scrollTop = $('#rawlog').scrollHeight;
+}
+
+function renderLedger(row) {
+  const r = runs[row] || { cdrs: [] };
+  const box = $('#ledger');
+  if (!r.cdrs || !r.cdrs.length) { box.innerHTML = '<div class="ladder-empty">no call records yet — they land a few seconds after the call ends</div>'; $('#ledger-note').textContent = ''; return; }
+  const maxDur = Math.max(...r.cdrs.map((c) => c.duration_ms || 1));
+  box.innerHTML = r.cdrs.map((c) => {
+    const w = Math.max(6, (c.duration_ms / maxDur) * 100);
+    const billedPct = c.billing_ms ? Math.min(100, (c.billing_ms / c.duration_ms) * 100) : 0;
+    const money = c.billing_ms
+      ? `<span class="charge">$${(c.charge ?? 0).toFixed(4)}</span><br>billed ${(c.billing_ms / 1000).toFixed(1)}s of ${(c.duration_ms / 1000).toFixed(1)}s`
+      : `<span class="free">$0.0000</span><br>never answered · ${(c.duration_ms / 1000).toFixed(1)}s free`;
+    return `<div class="leg">
+      <div class="who">${addr(c.from)} → ${addr(c.to)}<br><span class="kind">${c.type.replace('relay_', '').replace('_call', '')} · ${c.direction}</span></div>
+      <div class="bar" style="width:${w}%">
+        ${billedPct ? `<span class="billed" style="width:${billedPct}%"></span><span class="bridge-mark" style="right:${billedPct}%"></span>` : ''}
+      </div>
+      <div class="money">${money}</div>
+    </div>`;
+  }).join('');
+  const anyBilled = r.cdrs.some((c) => c.billing_ms > 0);
+  $('#ledger-note').textContent = anyBilled
+    ? 'The bar is the leg’s whole lifetime; the amber tail begins at the bridge. Everything before it — the ringing — was free.'
+    : 'Every leg of this call ended unanswered: billing_ms null, $0.00 across the board.';
+}
+
+function renderChecks(row) {
+  const sc = SCENARIOS.find((s) => s.row === row);
+  if (!sc) return; // guided pseudo-row has its own card steps
+  const state = derive(row);
+  let pass = 0, total = sc.checks.length;
+  sc.checks.forEach((c, i) => {
+    const li = $(`#check-${row}-${i}`);
+    const ok = !!c[1](state);
+    li.classList.toggle('yes', ok);
+    li.classList.toggle('no', !ok && (runs[row]?.events?.length > 0) && !(runs[row]?.live));
+    if (ok) pass++;
+  });
+  const v = $(`#verdict-${row}`);
+  if (runs[row]?.live) { v.className = 'verdict live'; v.textContent = 'LIVE'; }
+  else if (runs[row]?.events?.length) { v.className = `verdict ${pass === total ? 'pass' : 'fail'}`; v.textContent = `${pass}/${total} ${pass === total ? 'PASS' : 'CHECKS'}`; }
+  else { v.textContent = ''; }
+}
+
+// ── live stream ──────────────────────────────────────────────────────────────
+// ── guided cell-phone cards ──────────────────────────────────────────────────
+const guided = { card: null, countdown: null };
+
+function gsteps(card) { return document.querySelectorAll(`#gsteps-${card} li`); }
+function gsetStep(card, step, cls) {
+  for (const li of gsteps(card)) if (li.dataset.step === step) li.className = cls;
+}
+function gadvance(card, doneStep, nextStep) {
+  gsetStep(card, doneStep, 'done');
+  if (nextStep) gsetStep(card, nextStep, 'active');
+}
+function greset(card) {
+  for (const li of gsteps(card)) li.className = '';
+  $(`#gverdict-${card}`).textContent = '';
+  $(`#gcount-${card}`).textContent = '';
+  if (guided.countdown) { clearInterval(guided.countdown); guided.countdown = null; }
+}
+function gfill(cell, did, delayMs) {
+  document.querySelectorAll('.g-cell').forEach((el) => { el.textContent = cell || 'set on landing'; });
+  document.querySelectorAll('.g-did').forEach((el) => { el.textContent = did || 'run setup'; });
+  document.querySelectorAll('.g-delay').forEach((el) => { el.textContent = `${(delayMs / 1000).toFixed(1)}s`; });
+}
+function gcountdown(card, ms) {
+  const el = $(`#gcount-${card}`);
+  const until = Date.now() + ms;
+  guided.countdown = setInterval(() => {
+    const left = until - Date.now();
+    if (left <= 0) { el.textContent = ''; clearInterval(guided.countdown); guided.countdown = null; return; }
+    el.textContent = `· ${(left / 1000).toFixed(1)}s`;
+  }, 100);
+}
+
+async function gstart(card) {
+  if (busy && !guided.card) return; // a scenario/setup job owns the wire
+  greset(card);
+  const authDelay = Number($('#auth-delay').value) || 1500;
+  const res = await fetch(`/api/guided/start?card=${card}&authDelay=${authDelay}`, { method: 'POST' });
+  const out = await res.json();
+  if (!res.ok) { $(`#gverdict-${card}`).textContent = out.error; return; }
+}
+
+function guidedEvent(e) {
+  const card = guided.card;
+  if (!card) return;
+  if (e.evt === 'guided-ready') {
+    guidedDelayMs = e.authDelayMs || 1500;
+    gfill(e.cell, e.did, guidedDelayMs);
+    gadvance(card, 'listen', 'dial');
+    $(`#gverdict-${card}`).textContent = 'listening — grandma can dial now';
+  } else if (e.evt === 'offer') {
+    gadvance(card, 'dial', 'lookup');
+    gcountdown(card, guidedDelayMs);
+    $(`#gverdict-${card}`).textContent = 'call arrived — lookup running';
+  } else if (e.evt === 'app:decision') {
+    if (guided.countdown) { clearInterval(guided.countdown); guided.countdown = null; }
+    $(`#gcount-${card}`).textContent = '';
+    if (card === 'allow') {
+      gadvance(card, 'lookup', 'answer');
+      $(`#gverdict-${card}`).textContent = 'allowed — the child\'s handset (above) is about to ring';
+    } else {
+      gadvance(card, 'lookup', 'result');
+      $(`#gverdict-${card}`).textContent = e.allowed === false || e.allowed === undefined
+        ? 'denied — watch the stranger\'s phone end without connecting'
+        : 'unexpected: allowed';
+    }
+  } else if (e.evt === 'aleg-state' && e.state === 'answered' && card === 'allow') {
+    gadvance(card, 'answer', 'result');
+    gsetStep(card, 'result', 'done');
+    $(`#gverdict-${card}`).textContent = 'BRIDGED — check the timer on grandma\'s phone: it started at the child\'s pickup';
+  } else if (e.evt === 'aleg-state' && e.state === 'ended') {
+    if (card === 'deny') {
+      gsetStep(card, 'result', 'done');
+      $(`#gverdict-${card}`).textContent = 'call ended unconnected — promise held';
+    }
+  } else if (e.evt && e.evt.startsWith('app:error')) {
+    $(`#gverdict-${card}`).textContent = 'error — see console output';
+  }
+}
+let guidedDelayMs = 1500;
+
+for (const card of ['allow', 'deny']) {
+  $(`#gstart-${card}`).addEventListener('click', () => gstart(card));
+  $(`#gstop-${card}`).addEventListener('click', () => fetch('/api/guided/stop', { method: 'POST' }));
+}
+
+// the guided cards' "wait Xs" always mirrors the dropdown
+$('#auth-delay').addEventListener('change', () => {
+  const ms = Number($('#auth-delay').value) || 1500;
+  document.querySelectorAll('.g-delay').forEach((el) => { el.textContent = `${(ms / 1000).toFixed(1)}s`; });
+});
+
+const es = new EventSource('/api/events');
+es.onmessage = (msg) => {
+  const e = JSON.parse(msg.data);
+  if (e.channel === 'call') {
+    if (guided.card) {
+      guidedEvent(e);
+      // the ladder and ledger track the guided call too, one call at a time:
+      // every fresh offer wipes both so each dial reads from a clean sheet
+      if (e.evt === 'offer') {
+        runs.g = { events: [e], cdrs: [], live: true };
+        $('#ladder-sub').textContent = `guided ${guided.card} — LIVE call from your cell`;
+      } else if (e.evt === 'cdr') {
+        (runs.g ??= { events: [], cdrs: [], live: true }).cdrs.push(e);
+      } else {
+        (runs.g ??= { events: [], cdrs: [], live: true }).events.push(e);
+      }
+      render('g');
+      return;
+    }
+    const row = currentRow;
+    if (!row) return;
+    if (e.evt === 'cdr') runs[row].cdrs.push(e);
+    else runs[row].events.push(e);
+    if (selected === row) render(row);
+    return;
+  }
+  if (e.channel === 'shell') {
+    appendRaw(`[${e.kind}] ${e.line}`);
+    return;
+  }
+  if (e.channel === 'job') {
+    if (e.state === 'started') {
+      busy = true;
+      if (e.kind === 'guided') {
+        guided.card = e.card || 'allow';
+        greset(guided.card);
+        gsetStep(guided.card, 'listen', 'active');
+        $(`#gstart-${guided.card}`).style.display = 'none';
+        $(`#gstop-${guided.card}`).style.display = '';
+        $(`#gcard-${guided.card}`).classList.add('running');
+        $('#rawlog').textContent = '';
+        // fresh sheet: the ladder and ledger belong to this listener now
+        runs.g = { events: [], cdrs: [], live: true };
+        document.querySelectorAll('.scenario').forEach((el) => el.classList.remove('selected', 'running'));
+        $('#ladder-sub').textContent = `guided ${guided.card} — waiting for your dial`;
+        render('g');
+      } else if (e.kind === 'scenario') {
+        currentRow = e.row;
+        runs[e.row] = { events: [], cdrs: [], live: true };
+        document.querySelectorAll('.scenario').forEach((el) => el.classList.remove('running'));
+        const card = $(`#sc-${e.row}`); card.classList.add('running');
+        selectScenario(e.row);
+        $('#ladder-sub').textContent = `scenario ${e.row} — LIVE call in progress · child device: ${e.child || 'simulator'} · check time ${((e.authDelay ?? 1500) / 1000).toFixed(1)}s`;
+        $('#rawlog').textContent = '';
+      } else {
+        appendRaw(`[${e.kind}] started`);
+      }
+    } else {
+      busy = false;
+      if (e.kind === 'guided') {
+        const card = guided.card;
+        if (card) {
+          $(`#gstart-${card}`).style.display = '';
+          $(`#gstop-${card}`).style.display = 'none';
+          $(`#gcard-${card}`).classList.remove('running');
+          if (guided.countdown) { clearInterval(guided.countdown); guided.countdown = null; }
+        }
+        guided.card = null;
+        if (runs.g) runs.g.live = false;
+        $('#ladder-sub').textContent = 'guided listener stopped — ladder shows its last call';
+      } else if (e.kind === 'scenario' && runs[e.row]) {
+        runs[e.row].live = false;
+        $(`#sc-${e.row}`).classList.remove('running');
+        $('#ladder-sub').textContent = `scenario ${e.row} — call complete`;
+        if (selected === e.row) render(e.row);
+      } else {
+        appendRaw(`[${e.kind}] done (exit ${e.code})`);
+        refreshStatus();
+      }
+    }
+    setButtons();
+  }
+};
+let currentRow = null;
+
+function appendRaw(line) {
+  const el = $('#rawlog');
+  el.textContent = (el.textContent === 'idle' ? '' : el.textContent + '\n') + line;
+  el.scrollTop = el.scrollHeight;
+}
+
+// ── actions ──────────────────────────────────────────────────────────────────
+document.addEventListener('click', async (ev) => {
+  const run = ev.target.closest('[data-run]');
+  if (run && !busy) {
+    ev.stopPropagation();
+    const uri = childUri();
+    const delay = document.querySelector('#auth-delay').value;
+    const params = new URLSearchParams();
+    if (uri) params.set('child', uri);
+    params.set('authDelay', delay);
+    await fetch(`/api/run/${run.dataset.run}?${params}`, { method: 'POST' });
+  }
+});
+$('#btn-setup').addEventListener('click', () => !busy && fetch('/api/setup', { method: 'POST' }));
+$('#btn-teardown').addEventListener('click', () => {
+  if (busy) return;
+  if (confirm('Tear down the pwpoc-* topology on the demo space? Scenarios will need a rebuild afterward.')) {
+    fetch('/api/teardown', { method: 'POST' });
+  }
+});
+$('#btn-tests').addEventListener('click', () => !busy && fetch('/api/tests', { method: 'POST' }));
+
+function setButtons() {
+  document.querySelectorAll('[data-run], #btn-setup, #btn-teardown, #btn-tests').forEach((b) => {
+    b.disabled = busy;
+  });
+  // guided Start stays clickable while a guided listener runs — the server
+  // swaps listeners; only a scenario/setup/teardown job truly blocks it
+  document.querySelectorAll('#gstart-allow, #gstart-deny').forEach((b) => {
+    b.disabled = busy && !guided.card;
+  });
+}
+
+// ── topology status ──────────────────────────────────────────────────────────
+async function refreshStatus() {
+  const res = await fetch('/api/status');
+  const s = await res.json();
+  const chip = $('#topo-chip');
+  chip.classList.remove('ready', 'missing');
+  if (s.topology.ready) {
+    chip.classList.add('ready');
+    $('#topo-text').textContent = `${s.topology.space} · ${s.topology.domainApps.length} domain apps · ${s.topology.dids.length} DIDs`;
+  } else {
+    chip.classList.add('missing');
+    $('#topo-text').textContent = 'topology missing — build it before placing calls';
+  }
+  busy = !!s.busy;
+  const inboundDid = (s.topology.dids || []).find((d) => d.name === 'pwpoc-inbound-did');
+  gfill(s.cell, inboundDid ? inboundDid.number : null, Number($('#auth-delay').value) || 1500);
+  // refresh-safe: a page load during a running guided listener must restore
+  // the card's running state and its Stop button, or the lab looks locked
+  if (s.busy && s.busy.kind === 'guided') {
+    guided.card = s.busy.card || 'allow';
+    gsetStep(guided.card, 'listen', 'done');
+    gsetStep(guided.card, 'dial', 'active');
+    $(`#gstart-${guided.card}`).style.display = 'none';
+    $(`#gstop-${guided.card}`).style.display = '';
+    $(`#gcard-${guided.card}`).classList.add('running');
+    $(`#gverdict-${guided.card}`).textContent = 'listening — grandma can dial now';
+  } else if (!s.busy && guided.card) {
+    $(`#gstart-${guided.card}`).style.display = '';
+    $(`#gstop-${guided.card}`).style.display = 'none';
+    $(`#gcard-${guided.card}`).classList.remove('running');
+    guided.card = null;
+  }
+  setButtons();
+}
+refreshStatus();
+selectScenario('1');
+</script>
+</body>
+</html>

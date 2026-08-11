@@ -1,0 +1,888 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KiddyPhone · SWML Test Console</title>
+<script type="module">
+  // sip.js ships no UMD bundle; jsDelivr's ESM transform provides the module.
+  try {
+    window.SIP = await import('https://cdn.jsdelivr.net/npm/sip.js@0.21.2/+esm');
+  } catch (e) {
+    console.error('sip.js load failed', e);
+  }
+  window.dispatchEvent(new Event('sipjs-ready'));
+</script>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Lexend:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  /* SignalWire design tokens (dark theme) — colors are locked brand values.
+     Blue #044EF4 is fills/borders only on dark; readable blue text is #6e9eff. */
+  :root {
+    --panel: #0e0e18;                  /* bg-page */
+    --card: #181a28;                   /* bg-surface */
+    --well: #222436;                   /* bg-surface-raised */
+    --ink: #f0f0f4;                    /* fg-default */
+    --ink-soft: #a0a0aa;               /* fg-muted */
+    --line: rgba(255,255,255,.12);     /* border-default */
+    --coral: #F72A72;                  /* sw-fuchsia: caller events / kiddyphone accent */
+    --coral-soft: rgba(247,42,114,.12);
+    --teal: #6e9eff;                   /* webhook decisions (readable blue on dark) */
+    --teal-soft: rgba(4,78,244,.15);
+    --amber: #FFD700;                  /* the bridge moment, and only the bridge moment */
+    --amber-fill: #E8B14E;
+    --ok: #22c55e;
+    --bad: #ef4444;
+    --display: "Instrument Sans", sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+    --body: "Lexend", sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  html { background: var(--panel); }
+  body {
+    font-family: var(--body); color: var(--ink); background: var(--panel);
+    min-height: 100vh; padding: 0 20px 48px;
+  }
+  button { font: inherit; cursor: pointer; }
+  button:focus-visible, summary:focus-visible, select:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+
+  /* ── masthead ─────────────────────────────────────────── */
+  header {
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+    padding: 20px 4px 14px; border-bottom: 2px solid var(--ink);
+  }
+  .brand { font-family: var(--display); font-weight: 700; font-size: 22px; letter-spacing: .06em; }
+  .brand .dot { color: var(--coral); }
+  .masthead-sub { font-family: var(--mono); font-size: 11px; color: var(--ink-soft); letter-spacing: .08em; text-transform: uppercase; }
+  .spacer { flex: 1; }
+  .chip {
+    font-family: var(--mono); font-size: 11.5px; padding: 4px 10px; border: 1px solid var(--line);
+    border-radius: 3px; background: var(--card); display: inline-flex; gap: 6px; align-items: center;
+  }
+  .chip .lamp { width: 8px; height: 8px; border-radius: 50%; background: var(--ink-soft); }
+  .chip.ready .lamp { background: var(--ok); }
+  .chip.missing .lamp { background: var(--bad); }
+  .btn {
+    font-family: var(--mono); font-size: 11.5px; letter-spacing: .04em; padding: 5px 12px;
+    border: 1px solid var(--ink); border-radius: 3px; background: var(--card); color: var(--ink);
+  }
+  .btn:hover { background: var(--ink); color: var(--card); }
+  .btn[disabled] { opacity: .4; cursor: not-allowed; }
+  .btn:hover[disabled] { background: var(--card); color: var(--ink); }
+  .btn.primary { background: var(--ink); color: var(--card); }
+  .btn.primary:hover { background: var(--teal); border-color: var(--teal); }
+
+  /* ── thesis strip ─────────────────────────────────────── */
+  .thesis { display: grid; grid-template-columns: minmax(280px, 1.3fr) repeat(3, minmax(160px, 1fr)); gap: 14px; padding: 18px 4px; border-bottom: 1px solid var(--line); }
+  .thesis h1 { font-family: var(--display); font-weight: 700; font-size: 17px; line-height: 1.35; letter-spacing: .01em; }
+  .thesis h1 em { font-style: normal; color: var(--coral); }
+  .thesis p { font-size: 12.5px; color: var(--ink-soft); margin-top: 6px; line-height: 1.5; }
+  .promise { background: var(--card); border: 1px solid var(--line); border-radius: 4px; padding: 10px 12px; }
+  .promise .tag { font-family: var(--mono); font-size: 10px; color: var(--teal); letter-spacing: .12em; }
+  .promise .head { font-family: var(--display); font-weight: 600; font-size: 13px; margin: 3px 0 4px; }
+  .promise p { font-size: 11.5px; color: var(--ink-soft); line-height: 1.45; }
+  @media (max-width: 900px) { .thesis { grid-template-columns: 1fr 1fr; } }
+  .rules { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 8px; }
+  .rule { font-family: var(--mono); font-size: 10.5px; padding: 3px 9px; border: 1px solid var(--line); border-radius: 999px; color: var(--ink-soft); background: var(--card); }
+  .rule b { color: var(--bad); font-weight: 600; }
+
+  /* ── layout ───────────────────────────────────────────── */
+  .cols { display: grid; grid-template-columns: 330px 1fr; gap: 20px; padding-top: 20px; align-items: start; }
+  @media (max-width: 900px) { .cols { grid-template-columns: 1fr; } }
+
+  /* ── scenario cards ───────────────────────────────────── */
+  .lineup { display: flex; flex-direction: column; gap: 10px; }
+  .lineup-label {
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--ink-soft); margin-bottom: 2px;
+  }
+  .scenario { background: var(--card); border: 1px solid var(--line); border-radius: 4px; padding: 12px 12px 10px; border-left: 3px solid var(--line); }
+  .scenario.selected { border-left-color: var(--coral); }
+  .scenario.patched { border-left-color: var(--amber-fill); }
+  .scenario .row1 { display: flex; align-items: baseline; gap: 8px; }
+  .scenario .friendly { font-family: var(--display); font-weight: 600; font-size: 13.5px; }
+  .scenario .tech { font-family: var(--mono); font-size: 10.5px; color: var(--ink-soft); margin-top: 2px; }
+  .scenario .proves { font-size: 11.5px; color: var(--ink-soft); line-height: 1.45; margin: 7px 0 9px; }
+  .scenario .actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .scenario .verdict { font-family: var(--mono); font-size: 10.5px; }
+  .verdict.pass { color: var(--ok); } .verdict.fail { color: var(--bad); } .verdict.live { color: var(--amber); }
+  .dialbox { display: none; margin: 8px 0 2px; font-size: 11.5px; line-height: 1.5; padding: 7px 9px; background: var(--teal-soft); border-radius: 3px; }
+  .scenario.selected .dialbox { display: block; }
+  .dialbox b { font-family: var(--mono); font-weight: 600; }
+  .checks { list-style: none; padding: 8px 0 0; display: none; }
+  .scenario.selected .checks { display: block; }
+  .checks li { font-family: var(--mono); font-size: 10.5px; line-height: 1.8; color: var(--ink-soft); }
+  .checks li::before { content: "○ "; }
+  .checks li.yes { color: var(--ok); } .checks li.yes::before { content: "● "; }
+  .checks li.no { color: var(--bad); } .checks li.no::before { content: "× "; }
+  .arm-error { font-family: var(--mono); font-size: 10.5px; color: var(--bad); margin-top: 6px; white-space: pre-wrap; }
+
+  /* ── the board ────────────────────────────────────────── */
+  .board { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+  .panel { background: var(--card); border: 1px solid var(--line); border-radius: 4px; padding: 14px 16px 16px; }
+  .panel h2 { font-family: var(--display); font-weight: 700; font-size: 13px; letter-spacing: .08em; text-transform: uppercase; margin-bottom: 2px; }
+  .panel .sub { font-family: var(--mono); font-size: 10.5px; color: var(--ink-soft); margin-bottom: 12px; }
+  .panel .sub select { font: inherit; }
+
+  .ladder { overflow-x: auto; }
+  .ladder-grid { display: grid; grid-template-columns: 62px 1fr 1fr 1fr; min-width: 560px; }
+  .lane-head {
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase;
+    text-align: center; padding-bottom: 8px; color: var(--ink-soft); border-bottom: 1px solid var(--line);
+    position: sticky; top: 0; background: var(--card);
+  }
+  .lane { position: relative; padding: 4px 8px; }
+  .lane::before { content: ""; position: absolute; top: 0; bottom: 0; left: 50%; width: 1px; background: var(--well); }
+  .tick { font-family: var(--mono); font-size: 10px; color: var(--ink-soft); text-align: right; padding: 8px 8px 0 0; }
+  .evt {
+    position: relative; z-index: 1; margin: 4px auto; width: max-content; max-width: 100%;
+    font-family: var(--mono); font-size: 10.5px; line-height: 1.4; padding: 3px 8px;
+    background: var(--card); border: 1px solid var(--line); border-radius: 3px; text-align: center;
+  }
+  .evt.caller { border-color: var(--coral); color: var(--coral); background: var(--coral-soft); }
+  .evt.app { border-color: var(--teal); color: var(--teal); background: var(--teal-soft); }
+  .evt.child { border-color: var(--ink-soft); color: var(--ink); }
+  .evt.moment { font-weight: 700; }
+  .evt.err { border-color: var(--bad); color: var(--bad); background: rgba(239,68,68,.12); }
+  .arrow { grid-column: 2 / 5; position: relative; height: 20px; margin: 2px 0; }
+  .arrow .wire { position: absolute; top: 50%; border-top: 1.5px dashed var(--ink-soft); }
+  .arrow.dial .wire { left: 16.6%; right: 50%; border-color: var(--coral); }
+  .arrow.connect .wire { left: 50%; right: 16.6%; border-color: var(--teal); border-top-style: solid; }
+  .arrow.answer .wire { left: 16.6%; right: 16.6%; border-color: var(--amber); border-top-style: solid; }
+  .arrow .cap { position: absolute; top: 50%; transform: translateY(-52%); font-size: 12px; }
+  .arrow.dial .cap { right: 50%; color: var(--coral); }
+  .arrow.connect .cap { right: 16.6%; color: var(--teal); }
+  .arrow.answer .cap { left: 16.4%; color: var(--amber); transform: translateY(-52%) scaleX(-1); }
+  .arrow .lbl {
+    position: absolute; top: -7px; left: 50%; transform: translateX(-50%);
+    font-family: var(--mono); font-size: 9.5px; letter-spacing: .06em; color: var(--ink-soft);
+    background: var(--card); padding: 0 6px; white-space: nowrap;
+  }
+  .ladder-empty { font-family: var(--mono); font-size: 11px; color: var(--ink-soft); padding: 26px 8px; text-align: center; }
+
+  /* ── code path ────────────────────────────────────────── */
+  .step { display: grid; grid-template-columns: 26px 1fr; gap: 10px; padding: 8px 0; border-top: 1px dashed var(--well); align-items: baseline; }
+  .step:first-of-type { border-top: 0; }
+  .step .n { font-family: var(--mono); font-size: 10.5px; color: var(--ink-soft); text-align: right; }
+  .step .what { font-size: 12px; line-height: 1.5; }
+  .coderef {
+    font-family: var(--mono); font-size: 10.5px; padding: 1px 7px; margin-left: 6px;
+    border: 1px solid var(--line); border-radius: 3px; background: var(--panel); color: var(--teal);
+    white-space: nowrap; cursor: pointer;
+  }
+  .coderef:hover { border-color: var(--teal); background: var(--teal-soft); }
+  details.swml-prev { margin-top: 10px; }
+  details.swml-prev summary { font-family: var(--mono); font-size: 11px; color: var(--ink-soft); cursor: pointer; }
+  details.swml-prev pre { margin-top: 8px; }
+
+  /* ── raw log, code dialog ─────────────────────────────── */
+  details.raw summary { font-family: var(--mono); font-size: 11px; color: var(--ink-soft); cursor: pointer; }
+  .rawlog, pre {
+    font-family: var(--mono); font-size: 10.5px; line-height: 1.6; background: #1e1e1f; color: #d4d4d8; border: 1px solid rgba(255,255,255,.07);
+    padding: 10px 12px; border-radius: 4px; max-height: 260px; overflow: auto;
+    white-space: pre-wrap; word-break: break-all; margin-top: 8px;
+  }
+  dialog {
+    background: var(--card); color: var(--ink); border: 1px solid var(--line);
+    border-radius: 6px; width: min(880px, 92vw); padding: 0;
+  }
+  dialog::backdrop { background: rgba(0,0,0,.6); }
+  dialog .dhead { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--line); }
+  dialog .dhead b { font-family: var(--mono); font-size: 12px; }
+  dialog .dhead button { margin-left: auto; }
+  dialog pre { margin: 0; border-radius: 0 0 6px 6px; max-height: 70vh; }
+  dialog mark { background: #E8B14E66; color: #FFE9BD; }
+</style>
+</head>
+<body>
+
+<header>
+  <svg viewBox="0.00 0.00 1342.00 1528.00" aria-label="SignalWire" style="height:24px; width:auto; align-self:center;">
+    <path fill="#044ef4" d="M 551.23 5.32 C 587.71 9.54 619.84 26.47 639.40 58.35 C 654.08 82.30 662.11 112.89 658.32 140.58 C 654.81 166.19 642.08 189.00 623.95 207.45 Q 581.70 250.44 511.90 320.15 Q 359.55 472.30 202.28 627.03 Q 198.86 630.40 191.60 636.07 C 154.44 665.09 106.03 669.19 64.20 647.54 C 21.31 625.34 1.27 582.19 0.73 535.19 C 0.42 507.81 13.45 481.79 31.83 462.07 Q 34.91 458.76 47.74 445.98 Q 196.18 298.10 452.68 42.18 C 479.37 15.56 513.25 0.92 551.23 5.32 Z"/>
+    <path fill="#f72a72" d="M 1231.90 834.19 Q 1222.41 833.63 1217.50 833.49 Q 1166.47 832.06 1125.40 860.41 Q 1107.46 872.80 1092.82 888.57 Q 1076.30 906.38 1071.74 910.99 Q 1049.19 933.78 1023.79 958.57 A 0.55 0.55 0.0 0 1 1023.06 958.60 Q 1015.51 952.23 1015.02 951.74 Q 799.24 736.26 703.22 639.79 C 673.83 610.27 661.51 570.90 671.27 530.01 C 679.15 496.96 697.30 468.74 726.96 452.39 C 752.11 438.53 784.46 432.61 812.51 438.11 Q 844.35 444.35 868.76 468.60 Q 1032.69 631.51 1223.85 823.25 Q 1227.68 827.09 1232.13 833.80 A 0.25 0.25 0.0 0 1 1231.90 834.19 Z"/>
+    <path fill="#f72a72" d="M 96.20 687.43 A 0.16 0.16 0.0 0 1 96.31 687.16 Q 109.88 686.82 123.49 686.25 Q 181.95 683.82 222.94 642.18 Q 243.54 621.26 303.33 560.46 A 0.68 0.68 0.0 0 1 304.27 560.44 Q 311.78 567.32 314.91 570.42 Q 369.88 624.87 621.07 876.51 C 650.07 905.56 664.47 939.59 658.04 980.96 Q 655.51 997.21 648.59 1013.35 Q 629.04 1058.98 581.98 1075.71 C 545.63 1088.63 505.61 1086.80 474.21 1064.28 Q 467.19 1059.25 448.40 1040.51 Q 279.39 871.96 96.20 687.43 Z"/>
+    <path fill="#044ef4" d="M 1254.87 868.36 C 1301.06 888.47 1330.64 929.63 1326.40 981.25 Q 1325.32 994.52 1323.53 1003.26 Q 1318.60 1027.30 1304.85 1046.71 Q 1299.91 1053.69 1286.16 1067.41 Q 1076.08 1277.09 877.74 1474.49 Q 869.57 1482.61 863.22 1487.71 C 827.21 1516.62 778.88 1524.29 736.76 1503.84 C 705.31 1488.56 681.43 1459.88 672.57 1426.25 C 661.67 1384.90 674.54 1341.90 704.45 1311.43 Q 754.59 1260.36 806.06 1209.06 Q 962.02 1053.60 1114.87 903.02 Q 1131.54 886.60 1139.45 880.94 C 1174.04 856.23 1215.62 851.26 1254.87 868.36 Z"/>
+  </svg>
+  <div>
+    <div class="brand">KIDDYPHONE <span class="dot">●</span> SWML TEST CONSOLE</div>
+    <div class="masthead-sub">answer_on_bridge · external SWML webhook · live calls on the demo space</div>
+  </div>
+  <div class="spacer"></div>
+  <span class="chip" id="patch-chip"><span class="lamp"></span><span id="patch-text">checking line…</span></span>
+  <span class="chip" id="sse-chip"><span class="lamp"></span><span>evidence stream</span></span>
+</header>
+
+<section class="thesis">
+  <div>
+    <h1>The webhook returns a document; the platform holds the caller unanswered and answers only <em>when the child picks up</em>.</h1>
+    <p>One documented parameter does the work RELAY needed emergent behavior for: connect with answer_on_bridge. One webhook per call, no re-offer storm. Each scenario below patches the real DID at this server, places a live call, and shows the signaling as it lands in the evidence file.</p>
+    <div class="rules">
+      <span class="rule"><b>never</b> answer or play — media bills (D16)</span>
+      <span class="rule"><b>never</b> trust a handler write — verify with a fresh GET</span>
+      <span class="rule">error codes arrive as strings — compare numerically</span>
+      <span class="rule">SIP domain carries the identifier suffix, not the bare space</span>
+    </div>
+  </div>
+  <div class="promise">
+    <div class="tag">PROMISE P1</div>
+    <div class="head">Spam costs nothing</div>
+    <p>Billing starts at answer. The caller waits in ringback on an unanswered leg; declined and abandoned calls never start a timer.</p>
+  </div>
+  <div class="promise">
+    <div class="tag">PROMISE P2</div>
+    <div class="head">Blocked callers learn nothing</div>
+    <p>A declined caller's phone never shows connected. <span style="font-family:var(--mono)">hangup: decline</span> on the unanswered leg, no media, no clue.</p>
+  </div>
+  <div class="promise">
+    <div class="tag">PROMISE P3</div>
+    <div class="head">Answered means the child answered</div>
+    <p>The A-leg flips to answered at the child's pickup — measured live at the <span style="font-family:var(--mono)">connect_state: connected</span> event.</p>
+  </div>
+</section>
+
+<div class="cols">
+  <div class="lineup">
+    <div class="lineup-label">The child's phone — lives in this page</div>
+    <div class="scenario" id="phone-panel" style="border-left-color: var(--teal)">
+      <div class="row1">
+        <span class="friendly" id="phone-title">Web SIP phone</span>
+        <span class="verdict" id="phone-status" style="margin-left:auto">loading…</span>
+      </div>
+      <div class="tech" id="phone-aor">registering…</div>
+      <div class="dialbox" id="phone-ring" style="display:none; background: var(--coral-soft);">
+        <b id="phone-caller">incoming call</b>
+      </div>
+      <div class="actions" style="margin-top:8px">
+        <button class="btn primary" id="phone-answer" disabled>Answer</button>
+        <button class="btn" id="phone-hangup" disabled>Hang up</button>
+      </div>
+      <div class="proves" style="margin:7px 0 0;" id="phone-note">
+        Registered over SIP-on-WSS as the connect target for every allowed call, so the whole
+        loop (dial, ring, answer, bridge) runs inside this page. Credentials are served to the
+        local browser only; through the tunnel this panel stays dormant.
+      </div>
+      <audio id="phone-audio" autoplay></audio>
+    </div>
+
+    <div class="lineup-label" style="margin-top:10px">Whitelist lookup time</div>
+    <div class="scenario" id="auth-panel" style="border-left-color: var(--amber-fill)">
+      <label style="display:flex; gap:8px; align-items:center; font-family:var(--mono); font-size:11px;">
+        the check takes
+        <select id="auth-delay" style="font:inherit;">
+          <option value="1500">1.5s — KiddyPhone's stated time</option>
+          <option value="4000">4s — well inside the window?</option>
+          <option value="10000" selected>10s — the U4 stress case</option>
+          <option value="20000">20s — should be past any budget</option>
+        </select>
+      </label>
+      <div class="proves" style="margin:7px 0 0;">
+        Server-side runtime state, applied everywhere: the single webhook holds its RESPONSE
+        this long (the U4 probe), the park and in-script flows take it as their async check
+        time. It cannot ride on the handler URL — the platform drops query strings from
+        external SWML URLs (measured, call f6fed104).
+      </div>
+    </div>
+    <div class="lineup-label" style="margin-top:10px">Scenarios — patch the line, then dial</div>
+    <!-- cards injected -->
+  </div>
+
+  <div class="board">
+    <section class="panel">
+      <h2>Signal ladder</h2>
+      <div class="sub" id="ladder-sub">waiting for a call · showing <select id="call-select"><option>latest call</option></select></div>
+      <div class="ladder">
+        <div class="ladder-grid" id="ladder">
+          <div class="lane-head">time</div>
+          <div class="lane-head" style="color:var(--coral)">caller</div>
+          <div class="lane-head" style="color:var(--teal)">webhook · app</div>
+          <div class="lane-head">child</div>
+        </div>
+        <div class="ladder-empty" id="ladder-empty">no events yet — patch a scenario and place a call</div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Code path</h2>
+      <div class="sub" id="code-sub">what actually runs for the selected scenario — click a reference for the live source</div>
+      <div id="steps"></div>
+      <details class="swml-prev" id="swml-prev" hidden>
+        <summary>the exact SWML document this scenario returns (live preview)</summary>
+        <pre id="swml-pre">…</pre>
+      </details>
+    </section>
+
+    <section class="panel">
+      <h2>Console output</h2>
+      <div class="sub">raw evidence stream — every line of evidence/requests.ndjson as it lands</div>
+      <details class="raw" open>
+        <summary>show</summary>
+        <div class="rawlog" id="rawlog">idle</div>
+      </details>
+    </section>
+  </div>
+</div>
+
+<dialog id="code-dialog">
+  <div class="dhead"><b id="code-title">source</b><button class="btn" onclick="document.getElementById('code-dialog').close()">close</button></div>
+  <pre id="code-body"></pre>
+</dialog>
+
+<script>
+'use strict';
+const $ = (sel) => document.querySelector(sel);
+let CONFIG = {};
+let STATE = null;      // /api/state payload
+let selected = null;   // scenario id
+let currentCall = null;
+
+// ── scenario definitions ─────────────────────────────────────────────────────
+const wl = () => (CONFIG.whitelistPstn || []).join(', ') || 'the whitelisted number';
+const did = () => CONFIG.didNumber || 'the DID';
+
+const SCENARIOS = [
+  { id: 'single', place: true, arm: 'single', row: '1',
+    friendly: 'Grandma calls, the child picks up', tech: 'single webhook · inbound allow · PSTN → SIP',
+    proves: 'The webhook decides inline and returns connect with answer_on_bridge. The caller waits in ringback unanswered; the platform answers them at the child\'s pickup. CONFIRMED live 2026-08-10.',
+    dial: () => `Patch, then call <b>${did()}</b> from <b>${wl()}</b> and answer on the SIP device. With the lookup above at 10s+ this doubles as the U4 probe.`,
+    steps: [
+      ['SignalWire POSTs the call object (one webhook, one call ID — no re-offer storm)', 'server.js', "if (route === '/inbound')"],
+      ['Raw body appended to evidence — the capture that settled U5', 'capture.js', 'async function log'],
+      ['Identity extracted defensively (from / from_number, both spellings arrive)', 'identity.js', 'export function extractIdentity'],
+      ['Whitelist: E.164-normalized, user AND host for SIP, never throws (D12/D13)', 'whitelist.js', 'function isAllowed'],
+      ['The lookup delay holds the response — runtime state, never the URL (queries are dropped)', 'server.js', 'runtime.checkDelayMs'],
+      ['Verdict document: connect + answer_on_bridge: true', 'docs.js', 'export function inboundConnect'],
+      ['Bridge progress lands on status_url → the ladder\'s child lane', 'server.js', "if (route === '/status')"],
+    ],
+    preview: { path: '/inbound', from: 'WL' },
+    checks: [
+      ['exactly one webhook for this call', (c) => c.webhooks === 1],
+      ['whitelist allowed the caller', (c) => c.allowed === true],
+      ['bridge connected at pickup', (c) => c.connected === true],
+      ['no platform error', (c) => !c.error],
+    ]},
+  { id: 'blocked', place: false, arm: null, row: '2',
+    friendly: 'A stranger calls', tech: 'same webhook · inbound deny · silent decline',
+    proves: 'A caller not on the whitelist gets hangup: decline on the unanswered leg. No connected state on their handset, no ring at the child, nothing learned. Uses whichever inbound flow is patched.',
+    dial: () => `With any inbound scenario patched, call <b>${did()}</b> from any phone NOT on the whitelist. Watch their screen: it must never show connected.`,
+    steps: [
+      ['Same route, same capture, same identity extraction', 'server.js', "if (route === '/inbound')"],
+      ['Whitelist denies: wrong number, garbage, or right SIP user on the wrong host', 'whitelist.js', 'function isAllowed'],
+      ['The decline document: hangup, no answer, no media, by design (D16)', 'docs.js', 'export function decline'],
+    ],
+    preview: { path: '/inbound', from: '+15550001111' },
+    checks: [
+      ['whitelist denied the caller', (c) => c.allowed === false],
+      ['no bridge was attempted', (c) => c.connecting === false],
+      ['no platform error', (c) => !c.error],
+    ]},
+  { id: 'twostep', place: true, arm: 'twostep', row: '3',
+    friendly: 'Park it, then decide', tech: 'two-step · park at dead endpoint + REST update',
+    proves: 'Support\'s proposed design. The webhook answers instantly with a park (connect toward an endpoint that never answers), the check runs off the clock, then the Send Call Commands API hands the parked leg its verdict. The open question: does update land on an unanswered mid-connect leg?',
+    dial: () => `Patch, then call <b>${did()}</b> from <b>${wl()}</b>. The #update line lands after the lookup time above; if it says ok and the SIP phone rings, the design is proven.`,
+    steps: [
+      ['Respond immediately: park document, connect → dead endpoint, answer_on_bridge', 'docs.js', 'export function park'],
+      ['The check runs after the response is already gone', 'server.js', 'async function runTwoStepCheck'],
+      ['Verdict delivered to the LIVE call: POST /api/calling/calls, command update', 'rest.js', 'async function updateCall'],
+      ['Outcome recorded as a finding either way — never a crash', 'server.js', "capture.log('/inbound/twostep#update'"],
+    ],
+    preview: { path: '/inbound/twostep', from: 'WL' },
+    checks: [
+      ['parked instantly (webhook answered)', (c) => c.webhooks >= 1],
+      ['whitelist allowed the caller', (c) => c.allowed === true],
+      ['REST update accepted on the parked leg', (c) => c.updateOk === true],
+      ['bridge connected after the update', (c) => c.connected === true],
+    ]},
+  { id: 'request-flow', place: true, arm: 'request-flow', row: '4',
+    friendly: 'The document asks for itself', tech: 'in-script request → if · decision off the webhook path',
+    proves: 'The returned document is static. The unanswered leg itself POSTs to /auth mid-script (SWML request), saves the answer as variables, and branches. The response-budget question stops applying to the check entirely.',
+    dial: () => `Patch, then call <b>${did()}</b> from <b>${wl()}</b>. Watch for the /auth hit on the ladder after the lookup time above.`,
+    steps: [
+      ['One static document: request → if → connect or decline', 'docs.js', 'export function requestFlow'],
+      ['The unanswered leg POSTs {from} to /auth; SWML saves the response as vars', 'server.js', "if (route === '/auth')"],
+      ['Whitelist answers yes/no as strings — save_variables typing for booleans is unverified', 'whitelist.js', 'function isAllowed'],
+    ],
+    preview: { path: '/inbound/request-flow', from: 'WL' },
+    checks: [
+      ['document served', (c) => c.webhooks >= 1],
+      ['the leg called /auth mid-script', (c) => c.authAsked === true],
+      ['auth allowed the caller', (c) => c.authAllowed === true],
+      ['bridge connected after the branch', (c) => c.connected === true],
+    ]},
+  { id: 'outbound', arm: 'outbound', offArm: 'outbound-off', row: '5',
+    friendly: 'The child dials grandma', tech: 'outbound · whitelist on the destination',
+    proves: 'The child\'s device originates; the whitelist gates who they can call. Never exercised live on any stack — the first bridged call here is a new fact. Patching re-points the SIP endpoint\'s calling handler, not the DID.',
+    dial: () => `Patch outbound, then dial <b>${wl()}</b> from the SIP device (allowed), then any other number (declined).`,
+    steps: [
+      ['The SIP endpoint\'s calling handler points here while patched', 'arm.js', "scenario === 'outbound'"],
+      ['Whitelist runs on the DESTINATION (identity.to)', 'server.js', "if (route === '/outbound')"],
+      ['Destination used raw (SIP) or normalized to E.164 — never rebuilt from fragments', 'server.js', 'function resolveDestination'],
+      ['Same connect shape bridges the legs', 'docs.js', 'export function outboundConnect'],
+    ],
+    preview: { path: '/outbound', from: 'sip:child@example', to: 'WL' },
+    checks: [
+      ['destination decision recorded', (c) => c.allowed !== null],
+      ['allowed destination bridged / denied destination declined', (c) => c.allowed ? c.connected === true : c.connecting === false],
+      ['no platform error', (c) => !c.error],
+    ]},
+];
+
+// ── cards ────────────────────────────────────────────────────────────────────
+const lineup = document.querySelector('.lineup');
+for (const sc of SCENARIOS) {
+  const card = document.createElement('div');
+  card.className = 'scenario';
+  card.id = `sc-${sc.id}`;
+  card.innerHTML = `
+    <div class="row1"><span class="friendly">${sc.row}. ${sc.friendly}</span></div>
+    <div class="tech">${sc.tech}</div>
+    <div class="proves">${sc.proves}</div>
+    <div class="dialbox" id="dial-${sc.id}"></div>
+    <div class="actions">
+      ${sc.arm ? `<button class="btn primary" data-arm="${sc.arm}" data-card="${sc.id}">Patch line</button>` : ''}
+      ${sc.offArm ? `<button class="btn" data-arm="${sc.offArm}" data-card="${sc.id}">Unpatch</button>` : ''}
+      ${sc.place !== undefined ? `<button class="btn" data-place="${sc.place}" data-card="${sc.id}">Place test call</button>` : ''}
+      <span class="verdict" id="verdict-${sc.id}"></span>
+    </div>
+    <ul class="checks" id="checks-${sc.id}">
+      ${sc.checks.map((c, i) => `<li id="check-${sc.id}-${i}">${c[0]}</li>`).join('')}
+    </ul>
+    <div class="arm-error" id="err-${sc.id}"></div>`;
+  card.addEventListener('click', () => selectScenario(sc.id));
+  lineup.appendChild(card);
+}
+
+function selectScenario(id) {
+  selected = id;
+  document.querySelectorAll('.scenario').forEach((el) => el.classList.remove('selected'));
+  $(`#sc-${id}`).classList.add('selected');
+  const sc = SCENARIOS.find((s) => s.id === id);
+  $(`#dial-${id}`).innerHTML = sc.dial() + (sc.place !== undefined
+    ? `<br>Or press <b>Place test call</b>: the app dials from <b>+12083799823</b>${sc.place
+        ? ' (auto-whitelisted for this scenario); answer on the web phone above.'
+        : ' after removing it from the whitelist; expect the decline on the wire.'}`
+    : '');
+  renderSteps(sc);
+  renderChecks();
+}
+
+// ── code path panel ──────────────────────────────────────────────────────────
+function renderSteps(sc) {
+  $('#code-sub').textContent = `scenario ${sc.row} — ${sc.tech}`;
+  $('#steps').innerHTML = sc.steps.map(([what, file, fn], i) => `
+    <div class="step">
+      <div class="n">${String(i + 1).padStart(2, '0')}</div>
+      <div class="what">${what}
+        <button class="coderef" data-file="${file}" data-find="${encodeURIComponent(fn)}">${file} › ${fn.length > 38 ? fn.slice(0, 38) + '…' : fn}</button>
+      </div>
+    </div>`).join('');
+  document.querySelectorAll('.coderef').forEach((el) =>
+    el.addEventListener('click', () => openCode(el.dataset.file, decodeURIComponent(el.dataset.find))));
+  const prev = $('#swml-prev');
+  if (sc.preview) {
+    prev.hidden = false; prev.open = false;
+    $('#swml-pre').dataset.loaded = '';
+    prev.ontoggle = () => { if (prev.open && !$('#swml-pre').dataset.loaded) loadPreview(sc); };
+  } else prev.hidden = true;
+}
+
+async function loadPreview(sc) {
+  const from = sc.preview.from === 'WL' ? (CONFIG.whitelistPstn || ['+15551234567'])[0] : sc.preview.from;
+  const to = sc.preview.to === 'WL' ? (CONFIG.whitelistPstn || ['+15551234567'])[0] : sc.preview.to;
+  const body = { call: { call_id: 'preview', from, ...(to ? { to } : {}) } };
+  try {
+    const res = await fetch(sc.preview.path + '?preview=1', {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
+    });
+    $('#swml-pre').textContent = JSON.stringify(await res.json(), null, 2);
+    $('#swml-pre').dataset.loaded = '1';
+  } catch (e) { $('#swml-pre').textContent = 'preview failed: ' + e; }
+}
+
+// ── code dialog ──────────────────────────────────────────────────────────────
+const codeCache = {};
+async function openCode(file, find) {
+  $('#code-title').textContent = 'src/' + file;
+  const pre = $('#code-body');
+  pre.textContent = 'loading…';
+  $('#code-dialog').showModal();
+  try {
+    if (!codeCache[file]) codeCache[file] = (await (await fetch('/api/code?file=' + encodeURIComponent(file))).json()).source;
+    const src = codeCache[file];
+    const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+    const idx = src.indexOf(find);
+    if (idx >= 0) {
+      pre.innerHTML = esc(src.slice(0, idx)) + '<mark>' + esc(find) + '</mark>' + esc(src.slice(idx + find.length));
+      requestAnimationFrame(() => pre.querySelector('mark')?.scrollIntoView({ block: 'center' }));
+    } else pre.textContent = src;
+  } catch (e) { pre.textContent = 'failed to load source: ' + e; }
+}
+
+// ── evidence → calls ─────────────────────────────────────────────────────────
+const calls = new Map();   // callId -> { events: [line], t0: ms }
+const callOrder = [];
+
+function callIdOf(l) {
+  return l.identity?.callId || l.body?.params?.call_id || l.callId || null;
+}
+const authLines = [];  // /auth hits carry no call id; matched to calls by time
+function ingest(l) {
+  appendRaw(JSON.stringify(l));
+  if (l.route === '/auth') {
+    authLines.push({ at: Date.parse(l.ts) || Date.now(), allowed: l.allowed ?? null });
+    if (currentCall) { renderLadder(); renderChecks(); }
+    return;
+  }
+  if ((l.route || '').includes('place-call')) {
+    // Caller-side outcome; no call id of its own, belongs to the ladder's call.
+    if (currentCall && calls.has(currentCall)) {
+      calls.get(currentCall).events.push(l);
+      renderLadder(); renderChecks();
+    }
+    return;
+  }
+  const id = callIdOf(l);
+  if (!id || id === 'preview') return;
+  if (!calls.has(id)) {
+    calls.set(id, { events: [], t0: Date.parse(l.ts) || Date.now() });
+    callOrder.push(id);
+    if (callOrder.length > 30) calls.delete(callOrder.shift());
+    refreshCallSelect();
+    currentCall = id;   // a new call always grabs the ladder
+    $('#call-select').value = id;
+  }
+  calls.get(id).events.push(l);
+  if (id === currentCall) { renderLadder(); renderChecks(); }
+}
+
+function refreshCallSelect() {
+  const sel = $('#call-select');
+  sel.innerHTML = [...callOrder].reverse().map((id) =>
+    `<option value="${id}">${id.slice(0, 8)}…</option>`).join('') || '<option>latest call</option>';
+}
+$('#call-select').addEventListener('change', (e) => { currentCall = e.target.value; renderLadder(); renderChecks(); });
+
+// derive check-state from one call's evidence
+function derive(id) {
+  const c = { webhooks: 0, allowed: null, connecting: false, connected: false, error: null, updateOk: null, authAsked: false, authAllowed: null };
+  const run = calls.get(id);
+  if (!run) return c;
+  for (const l of run.events) {
+    if ((l.route || '').startsWith('/inbound') && !l.route.includes('#') || l.route === '/outbound') {
+      c.webhooks++;
+      if (typeof l.allowed === 'boolean') c.allowed = l.allowed;
+    }
+    if (l.route === '/status') {
+      const p = l.body?.params || {};
+      if (l.body?.event_type === 'calling.error') c.error = p.error;
+      if (p.connect_state === 'connecting') c.connecting = true;
+      if (p.connect_state === 'connected') c.connected = true;
+    }
+    if ((l.route || '').includes('#update')) c.updateOk = !!l.result?.ok;
+  }
+  // /auth hits carry no call id: attribute any inside this call's 2-minute window
+  const hit = authLines.find((a) => a.at >= run.t0 - 2000 && a.at <= run.t0 + 120_000);
+  if (hit) { c.authAsked = true; c.authAllowed = hit.allowed; }
+  return c;
+}
+
+// ── ladder ───────────────────────────────────────────────────────────────────
+function eventsFor(id) {
+  const run = calls.get(id);
+  if (!run) return [];
+  const out = [];
+  const t0 = run.t0;
+  const ms = (l) => Math.max(0, (Date.parse(l.ts) || t0) - t0);
+  for (const l of run.events) {
+    const m = ms(l);
+    if ((l.route || '').startsWith('/inbound') && !l.route.includes('#')) {
+      out.push({ ms: m, lane: 'caller', text: `dials ${short(l.identity?.to)}`, cls: 'caller', arrow: { cls: 'dial', lbl: 'INVITE → webhook', cap: '►' } });
+      out.push({ ms: m, lane: 'app', text: `webhook: ${l.route}${l.query || ''}`, cls: 'app' });
+      if (typeof l.allowed === 'boolean')
+        out.push({ ms: m, lane: 'app', text: l.allowed ? `whitelist: ALLOW ${short(l.identity?.from)}` : `whitelist: DENY ${short(l.identity?.from)}`, cls: 'app moment' });
+    }
+    if (l.route === '/outbound') {
+      out.push({ ms: m, lane: 'child', text: `child dials ${short(l.identity?.to)}`, cls: 'child' });
+      if (typeof l.allowed === 'boolean')
+        out.push({ ms: m, lane: 'app', text: l.allowed ? `whitelist: ALLOW destination` : `whitelist: DENY destination`, cls: 'app moment' });
+    }
+    if ((l.route || '').includes('#update'))
+      out.push({ ms: m, lane: 'app', text: l.result?.ok ? 'REST update delivered to the parked leg' : `REST update FAILED: ${l.result?.error || l.result?.status}`, cls: l.result?.ok ? 'app moment' : 'app err' });
+    if ((l.route || '').includes('place-call'))
+      out.push({ ms: m, lane: 'caller', text: l.answered ? `test caller answered (+${((l.afterMs || 0) / 1000).toFixed(1)}s)` : `test caller: ${l.reason || 'failed'} (+${((l.afterMs || 0) / 1000).toFixed(1)}s)`, cls: l.answered ? 'caller moment' : (l.reason === 'decline' ? 'caller' : 'caller err') });
+    if (l.route === '/status') {
+      const p = l.body?.params || {};
+      if (p.connect_state === 'connecting')
+        out.push({ ms: m, lane: 'child', text: 'line rings (leg unanswered)', cls: 'child', arrow: { cls: 'connect', lbl: 'connect · answer_on_bridge', cap: '►' } });
+      if (p.connect_state === 'connected') {
+        out.push({ ms: m, lane: 'child', text: 'child picks up', cls: 'child moment', arrow: { cls: 'answer', lbl: 'answered at the bridge · billing starts', cap: '►' } });
+        out.push({ ms: m, lane: 'caller', text: 'caller hears “hello”', cls: 'caller moment' });
+      }
+      if (p.connect_state === 'disconnected')
+        out.push({ ms: m, lane: 'caller', text: 'call ends', cls: 'caller' });
+      if (l.body?.event_type === 'calling.error')
+        out.push({ ms: m, lane: 'app', text: `${p.error?.code} ${p.error?.message}: ${short(JSON.stringify(p.error?.message_data?.[0]?.errors || ''))}`, cls: 'app err' });
+    }
+  }
+  return out.sort((a, b) => a.ms - b.ms);
+}
+
+const LANES = { caller: 2, app: 3, child: 4 };
+const short = (s) => typeof s === 'string' ? s.replace(/^sips?:/, '').split('@')[0].slice(0, 28) : '?';
+
+function renderLadder() {
+  const grid = $('#ladder');
+  grid.querySelectorAll('.tick, .evt, .arrow, .lane').forEach((el) => el.remove());
+  const evts = currentCall ? eventsFor(currentCall) : [];
+  $('#ladder-empty').style.display = evts.length ? 'none' : 'block';
+  if (currentCall) $('#ladder-sub').childNodes[0].textContent = `call ${currentCall.slice(0, 8)}… · ${evts.length} events · showing `;
+
+  for (const e of evts) {
+    if (e.arrow) {
+      const tickA = document.createElement('div'); tickA.className = 'tick'; grid.appendChild(tickA);
+      const a = document.createElement('div');
+      a.className = `arrow ${e.arrow.cls}`;
+      a.innerHTML = `<span class="wire"></span><span class="cap">${e.arrow.cap}</span><span class="lbl">${e.arrow.lbl}</span>`;
+      grid.appendChild(a);
+    }
+    const tick = document.createElement('div');
+    tick.className = 'tick';
+    tick.textContent = `+${(e.ms / 1000).toFixed(2)}s`;
+    grid.appendChild(tick);
+    for (let col = 2; col <= 4; col++) {
+      const cell = document.createElement('div');
+      cell.className = 'lane';
+      if (LANES[e.lane] === col) {
+        const chip = document.createElement('div');
+        chip.className = `evt ${e.cls}`;
+        chip.textContent = e.text;
+        cell.appendChild(chip);
+      }
+      grid.appendChild(cell);
+    }
+  }
+}
+
+function renderChecks() {
+  if (!selected) return;
+  const sc = SCENARIOS.find((s) => s.id === selected);
+  const c = currentCall ? derive(currentCall) : {};
+  let pass = 0;
+  sc.checks.forEach((ch, i) => {
+    const li = $(`#check-${sc.id}-${i}`);
+    const ok = !!ch[1](c);
+    li.classList.toggle('yes', ok);
+    li.classList.toggle('no', !ok && !!currentCall);
+    if (ok) pass++;
+  });
+  const v = $(`#verdict-${sc.id}`);
+  v.className = `verdict ${pass === sc.checks.length ? 'pass' : 'fail'}`;
+  v.textContent = currentCall ? `${pass}/${sc.checks.length} ${pass === sc.checks.length ? 'PASS' : 'CHECKS'}` : '';
+}
+
+// ── raw log ──────────────────────────────────────────────────────────────────
+function appendRaw(line) {
+  const el = $('#rawlog');
+  el.textContent = (el.textContent === 'idle' ? '' : el.textContent + '\n') + line;
+  if (el.textContent.length > 200000) el.textContent = el.textContent.slice(-150000);
+  el.scrollTop = el.scrollHeight;
+}
+
+// ── stream ───────────────────────────────────────────────────────────────────
+const es = new EventSource('/api/evidence/stream');
+es.onopen = () => $('#sse-chip').classList.add('ready');
+es.onerror = () => $('#sse-chip').classList.remove('ready');
+es.onmessage = (msg) => { try { ingest(JSON.parse(msg.data)); } catch {} };
+
+// ── patch state ──────────────────────────────────────────────────────────────
+function applyState(s) {
+  STATE = s;
+  document.querySelectorAll('.scenario').forEach((el) => el.classList.remove('patched'));
+  const chip = $('#patch-chip');
+  chip.classList.remove('ready', 'missing');
+  let text = 'line unpatched';
+  const did = s.did || {};
+  if (did.scenario) {
+    $(`#sc-${did.scenario}`)?.classList.add('patched');
+    $('#sc-blocked')?.classList.add('patched');
+    text = `patched → ${new URL(did.url).pathname} · lookup ${(CONFIG.checkDelayMs || 0) / 1000}s`;
+    chip.classList.add('ready');
+  } else if (did.handler) {
+    text = `off-panel: ${did.handler}`;
+    chip.classList.add('missing');
+  }
+  if (s.outbound?.armed) {
+    $('#sc-outbound')?.classList.add('patched');
+    text += ' · outbound patched';
+    chip.classList.add('ready');
+  }
+  $('#patch-text').textContent = text;
+}
+
+async function refreshState() {
+  try {
+    const res = await fetch('/api/state');
+    const body = await res.json();
+    CONFIG = body.config || {};
+    const sel = $('#auth-delay');
+    if (CONFIG.checkDelayMs && [...sel.options].some((o) => o.value == CONFIG.checkDelayMs)) sel.value = String(CONFIG.checkDelayMs);
+    if (body.did) applyState(body);
+    else { $('#patch-text').textContent = 'state unavailable: ' + (body.error || '?'); $('#patch-chip').classList.add('missing'); }
+    if (selected) { const sc = SCENARIOS.find((x) => x.id === selected); $(`#dial-${selected}`).innerHTML = sc.dial(); }
+  } catch { $('#patch-text').textContent = 'server unreachable'; }
+}
+
+// ── actions ──────────────────────────────────────────────────────────────────
+document.addEventListener('click', async (ev) => {
+  const place = ev.target.closest('[data-place]');
+  if (place) {
+    ev.stopPropagation();
+    selectScenario(place.dataset.card);
+    const errEl = $(`#err-${place.dataset.card}`);
+    errEl.textContent = '';
+    place.disabled = true;
+    place.textContent = 'Placing…';
+    try {
+      const res = await fetch('/api/place-call', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ callerAllowed: place.dataset.place === 'true' }),
+      });
+      const body = await res.json();
+      if (!body.ok) errEl.textContent = 'call failed to start: ' + (body.error || res.status);
+      else errEl.textContent = '';
+    } catch (e) { errEl.textContent = 'call failed to start: ' + e; }
+    // The result lands on the wire as /place-call#result; the caller hangs
+    // up on its own, so free the button after the dial window.
+    setTimeout(() => { place.disabled = false; place.textContent = 'Place test call'; }, 8000);
+    return;
+  }
+
+  const btn = ev.target.closest('[data-arm]');
+  if (!btn) return;
+  ev.stopPropagation();
+  const cardId = btn.dataset.card;
+  selectScenario(cardId);
+  const errEl = $(`#err-${cardId}`);
+  errEl.textContent = '';
+  btn.disabled = true;
+  const payload = { scenario: btn.dataset.arm };
+  try {
+    const res = await fetch('/api/arm', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) });
+    const body = await res.json();
+    if (!body.ok) errEl.textContent = 'patch failed: ' + (body.error || res.status);
+    if (body.state) applyState(body.state);
+  } catch (e) { errEl.textContent = 'patch failed: ' + e; }
+  finally { btn.disabled = false; }
+});
+
+$('#auth-delay').addEventListener('change', async () => {
+  const ms = Number($('#auth-delay').value) || 0;
+  await fetch('/api/check-delay', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ms }) });
+  await refreshState();
+});
+
+// ── the in-page child phone (SIP.js over WSS) ────────────────────────────────
+// Registration proven against wss://<sip-domain> (101 with subprotocol "sip").
+// The panel stays dormant when credentials are unavailable (tunnel access) or
+// SIP.js fails to load; every state lands in the status chip.
+async function bootPhone() {
+  const status = (cls, text) => {
+    const el = $('#phone-status');
+    el.className = `verdict ${cls}`;
+    el.textContent = text;
+  };
+  let cfg;
+  try {
+    const res = await fetch('/api/phone-config');
+    if (!res.ok) {
+      status('fail', res.status === 403 ? 'local browser only' : 'not configured');
+      $('#phone-aor').textContent = res.status === 403
+        ? 'open http://localhost:8080/ui to use the phone'
+        : 'set SIP_PHONE_USER / SIP_PHONE_PASSWORD / SIP_PHONE_DOMAIN';
+      return;
+    }
+    cfg = await res.json();
+  } catch { status('fail', 'unreachable'); return; }
+
+  $('#phone-aor').textContent = cfg.aor;
+  if (!window.SIP) {
+    await new Promise((r) => window.addEventListener('sipjs-ready', r, { once: true }));
+  }
+  if (!window.SIP) { status('fail', 'SIP.js failed to load'); return; }
+  const SIP = window.SIP;
+
+  const ua = new SIP.UserAgent({
+    uri: SIP.UserAgent.makeURI(cfg.aor),
+    transportOptions: { server: cfg.wss },
+    authorizationUsername: cfg.username,
+    authorizationPassword: cfg.password,
+    logLevel: 'warn',
+    delegate: {
+      onInvite(invitation) {
+        session = invitation;
+        const from = invitation.remoteIdentity?.uri?.toString?.() || 'unknown caller';
+        $('#phone-caller').textContent = `ringing: ${from}`;
+        $('#phone-ring').style.display = 'block';
+        $('#phone-answer').disabled = false;
+        $('#phone-hangup').disabled = false; // reject
+        status('live', 'RINGING');
+        invitation.stateChange.addListener((s) => {
+          if (s === 'Established') {
+            status('live', 'ON CALL');
+            $('#phone-ring').style.display = 'none';
+            $('#phone-answer').disabled = true;
+            const pc = invitation.sessionDescriptionHandler?.peerConnection;
+            if (pc) {
+              const stream = new MediaStream();
+              pc.getReceivers().forEach((r) => r.track && stream.addTrack(r.track));
+              $('#phone-audio').srcObject = stream;
+            }
+          }
+          if (s === 'Terminated') {
+            status('pass', 'REGISTERED');
+            $('#phone-ring').style.display = 'none';
+            $('#phone-answer').disabled = true;
+            $('#phone-hangup').disabled = true;
+            $('#phone-audio').srcObject = null;
+            session = null;
+          }
+        });
+      },
+    },
+  });
+
+  let session = null;
+  $('#phone-answer').addEventListener('click', () => {
+    session?.accept({ sessionDescriptionHandlerOptions: { constraints: { audio: true, video: false } } })
+      .catch((e) => status('fail', 'answer failed: ' + e));
+  });
+  $('#phone-hangup').addEventListener('click', () => {
+    if (!session) return;
+    if (session.state === 'Established') session.bye().catch(() => {});
+    else session.reject().catch(() => {});
+  });
+
+  try {
+    await ua.start();
+    const registerer = new SIP.Registerer(ua, { expires: 300 });
+    registerer.stateChange.addListener((s) => {
+      if (s === 'Registered') status('pass', 'REGISTERED');
+      else if (s === 'Unregistered') status('fail', 'UNREGISTERED');
+    });
+    await registerer.register();
+  } catch (e) {
+    status('fail', 'register failed');
+    $('#phone-note').textContent = 'Registration error: ' + e + '. Check the WSS domain and credentials.';
+  }
+}
+bootPhone();
+
+// ── boot ─────────────────────────────────────────────────────────────────────
+(async () => {
+  await refreshState();
+  selectScenario('single');
+  // history arrives through the SSE replay; no separate fetch, no duplicates
+  setInterval(refreshState, 15000);   // catches silent handler reverts
+})();
+</script>
+</body>
+</html>

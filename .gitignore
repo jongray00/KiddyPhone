@@ -1,0 +1,21 @@
+node_modules/
+.DS_Store
+
+# credentials and per-space state stay local
+.env
+console/spaces.json
+apps/relay/live/webphone*.json
+
+# generated live-run artifacts (setup.mjs recreates them per space)
+apps/relay/live/topology*.json
+apps/relay/live/inventory-pre-*.json
+apps/relay/live/observed-from.json
+apps/relay/live/row*-cdr.json
+apps/swml/evidence/
+*.log
+
+# scratch
+notes.txt
+
+# internal working notes, not part of the handoff
+docs/superpowers/
