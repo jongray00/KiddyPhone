@@ -27,6 +27,16 @@ export function createArmer({ spaceUrl, projectId, token, publicUrl, didId, sipE
   const didUrl = `https://${spaceUrl}/api/relay/rest/phone_numbers/${didId}`;
   const sipUrl = `https://${spaceUrl}/api/relay/rest/endpoints/sip/${sipEndpointId}`;
 
+  // PUBLIC_URL may carry a path: behind the lab gateway this app is mounted at
+  // /swml, so an armed handler reads https://host/swml/inbound. Readback has to
+  // account for that prefix or every scenario looks unarmed.
+  let basePath = '';
+  try {
+    basePath = new URL(publicUrl).pathname.replace(/\/+$/, '');
+  } catch {
+    basePath = '';
+  }
+
   async function call(url, method, body) {
     const res = await withDeadline(
       fetchImpl(url, {
@@ -51,9 +61,14 @@ export function createArmer({ spaceUrl, projectId, token, publicUrl, didId, sipE
     if (handler === 'relay_script' && typeof rawUrl === 'string') {
       try {
         const u = new URL(rawUrl);
+        // Match this app's own base first, then bare-suffix as a fallback: a
+        // handler armed before the public hostname last changed still reads as
+        // the scenario it is, which is what the operator needs to see.
         scenario =
-          Object.entries(INBOUND_ROUTES).find(([, path]) => u.pathname === path)?.[0] ?? null;
-        if (!scenario && u.pathname.startsWith('/relay-bins/')) scenario = 'static';
+          Object.entries(INBOUND_ROUTES).find(
+            ([, route]) => u.pathname === `${basePath}${route}` || u.pathname === route,
+          )?.[0] ?? null;
+        if (!scenario && u.pathname.includes('/relay-bins/')) scenario = 'static';
         if (u.searchParams.has('delay')) delayMs = Number(u.searchParams.get('delay')) || 0;
       } catch {
         scenario = null;

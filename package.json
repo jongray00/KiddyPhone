@@ -5,7 +5,7 @@
   "type": "module",
   "description": "Clean-room POC: KiddyPhone whitelist gating via connect-before-answer on @signalwire/realtime-api 4.2.1. Never answers; never hangs up on 409.",
   "scripts": {
-    "test": "node --test 'apps/relay/test/*.test.mjs' && cd apps/swml && node --test 'test/*.test.mjs'",
+    "test": "node --test apps/relay/test/*.test.mjs && cd apps/swml && node --test test/*.test.mjs",
     "smoke": "node apps/relay/live/smoke.mjs",
     "console": "node console/relay/server.mjs",
     "gateway": "node console/gateway.mjs"

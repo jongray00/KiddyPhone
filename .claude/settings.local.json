@@ -1,0 +1,35 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(env)",
+      "Bash(grep -n \"127\\\\.0\\\\.0\\\\.1\\\\|localhost\\\\|http://\\\\|EventSource\\\\|fetch\\('\\\\|fetch\\(\\\\`\\\\|fetch\\(\\\\\"\" console/relay/index.html)",
+      "Bash(grep -n \"127\\\\.0\\\\.0\\\\.1\\\\|localhost\\\\|http://\\\\|EventSource\\\\|fetch\\('\\\\|fetch\\(\\\\`\\\\|fetch\\(\\\\\"\\\\|/api/\" apps/swml/src/ui.html)",
+      "Bash(pkill -f \"console/gateway.mjs\")",
+      "Bash(nohup node console/gateway.mjs)",
+      "Bash(printf 'FOO=fromfile\\\\nBAR=fromfile\\\\n')",
+      "Bash(printf 'console.log\\(process.env.FOO, process.env.BAR\\)\\\\n')",
+      "Bash(FOO=fromshell node -e \"process.loadEnvFile\\('./t.env'\\); console.log\\('FOO=',process.env.FOO,'BAR=',process.env.BAR\\)\")",
+      "Bash(npm test *)",
+      "Bash(node --test apps/relay/test/)",
+      "Bash(node --test test/)",
+      "Bash(curl -s http://127.0.0.1:5000/api/state)",
+      "Bash(pkill -f \"echo.mjs\")",
+      "Bash(awk '{print $2}')",
+      "Bash(xargs -r kill -9)",
+      "Bash(curl -s -o /dev/null -w \"8787 -> %{http_code}\\\\n\" http://127.0.0.1:8787/)",
+      "Bash(curl -s -o /dev/null -w \"5000 -> %{http_code}\\\\n\" http://127.0.0.1:5000/)",
+      "Bash(bash /tmp/claude-1000/-home-runner-workspace/d8773c2e-7041-4c45-b5cd-6704b42a2470/scratchpad/restart.sh)",
+      "Bash(bash /tmp/claude-1000/-home-runner-workspace/d8773c2e-7041-4c45-b5cd-6704b42a2470/scratchpad/swml-manual.sh)",
+      "Bash(pkill -f '^node src/server.js')",
+      "Bash(curl -s -o /dev/null -w \"8080 -> %{http_code}\\\\n\" http://127.0.0.1:8080/healthz)",
+      "Bash(ps -eo pid,args)",
+      "Bash(awk '{print $1}')",
+      "Bash(xargs -r kill)",
+      "Bash(ps -eo pid,ppid,args)",
+      "Bash(git checkout *)",
+      "Bash(node -e ' *)",
+      "Bash(node *)",
+      "Bash(bash -lc 'node -e \"const t=process.env.SIGNALWIRE_TOKEN||\\\\\"\\\\\"; const p=process.env.SIGNALWIRE_PROJECT_ID||\\\\\"\\\\\"; console.log\\(\\\\\"login-shell token: len=\\\\\"+t.length+\\\\\" prefix=\\\\\"+t.slice\\(0,3\\)+\\\\\" suffix=\\\\\"+t.slice\\(-4\\)+\\\\\" identical-to-project=\\\\\"+\\(p===t\\)\\)\"')"
+    ]
+  }
+}

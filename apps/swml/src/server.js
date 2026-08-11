@@ -264,7 +264,13 @@ if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).
     console.warn('SignalWire credentials missing: the two-step REST update will fail until they are set');
   }
   if (!cfg.publicUrl) {
-    console.warn('PUBLIC_URL missing: status_url callbacks and the request-flow /auth URL will be broken');
+    console.warn(
+      'PUBLIC_URL missing: arming, status_url callbacks and the request-flow /auth URL are all broken. ' +
+        'Launched from the lab gateway this is injected automatically; standalone, set it to the base URL ' +
+        'the space can reach these routes at (no trailing slash).',
+    );
+  } else {
+    console.log(`webhook base: ${cfg.publicUrl} — the space POSTs ${cfg.publicUrl}/inbound when armed`);
   }
 
   const capture = createCapture(new URL('../evidence', import.meta.url).pathname);
@@ -307,6 +313,13 @@ if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).
       capture,
       callerNumber: process.env.PWPOC_CALLER_NUMBER || '+12083799823',
       runtime,
+      // On a hosted deploy the operator's own browser reaches /ui through a
+      // proxy, so the local-browser-only gate on the phone credentials and the
+      // test-call trigger would refuse the demo itself. Opt out with
+      // PWPOC_ALLOW_FORWARDED_CONTROL=0.
+      allowForwarded:
+        process.env.PWPOC_ALLOW_FORWARDED_CONTROL === '1' ||
+        (process.env.PWPOC_ALLOW_FORWARDED_CONTROL !== '0' && Boolean(process.env.REPL_ID)),
     });
   } else {
     console.warn('PWPOC_DID_ID / PWPOC_SIP_ENDPOINT_ID missing: /ui disabled');
@@ -314,9 +327,15 @@ if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).
 
   const app = createApp({ ...cfg, capture, rest, control, runtime });
 
-  app.listen(cfg.port, () => {
+  // Loopback by default. The space never reaches this port directly — it
+  // reaches PUBLIC_URL, which fronts this app — and a hosted platform will
+  // publish any port it finds bound to every interface, which would put the
+  // control API (phone credentials, the test-call trigger) on a second public
+  // surface that bypasses the gateway. HOST=0.0.0.0 opts out.
+  const host = process.env.HOST || '127.0.0.1';
+  app.listen(cfg.port, host, () => {
     console.log(
-      `kiddyphone swml poc on :${cfg.port}  whitelist=${cfg.whitelist.keys.size} delay=${cfg.delayMs}ms check=${cfg.checkDelayMs}ms evidence=${capture.file}`,
+      `kiddyphone swml poc on ${host}:${cfg.port}  whitelist=${cfg.whitelist.keys.size} delay=${cfg.delayMs}ms check=${cfg.checkDelayMs}ms evidence=${capture.file}`,
     );
   });
 }

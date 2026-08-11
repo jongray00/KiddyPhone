@@ -185,7 +185,7 @@
       <div class="name">SWML</div>
       <p>The space fetches an SWML document from a webhook at call time; the whitelist verdict
       is rendered as the document itself.</p>
-      <div class="reach">Needs the space to reach this machine: set PUBLIC_URL (tunnel).
+      <div class="reach" id="swml-reach">Needs the space to reach this lab over a public URL.
       Static-script fallback: planned.</div>
     </button>
   </div>
@@ -353,7 +353,18 @@
     try {
       const out = await api('/api/state');
       state.slots = out.slots;
-      $('gw-state').textContent = 'gateway · 127.0.0.1:' + out.gateway.port;
+      // Show where this lab actually answers from, not a loopback guess: on a
+      // hosted deploy the operator is looking at a public hostname.
+      $('gw-state').textContent = out.gateway.publicOrigin
+        ? 'gateway · ' + out.gateway.publicOrigin.replace(/^https:\/\//, '')
+        : 'gateway · 127.0.0.1:' + out.gateway.port;
+      const reach = $('swml-reach');
+      if (reach) {
+        reach.textContent = out.gateway.swmlWebhookBase
+          ? 'Reachable: the space fetches documents from ' + out.gateway.swmlWebhookBase +
+            ' — armed for you at launch.'
+          : 'Needs the space to reach this lab over a public URL: set PWPOC_PUBLIC_ORIGIN or PUBLIC_URL.';
+      }
       renderSlots();
     } catch {
       $('gw-state').textContent = 'gateway · unreachable';

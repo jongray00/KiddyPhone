@@ -32,6 +32,45 @@ docs/           Findings and review reports
 - `apps/relay/src/signalwire/` — RELAY SDK integration (handler, connect-guard, app)
 - `apps/swml/src/signalwire/` — SWML artifacts (docs, rest, arm, caller)
 
+## Routing and webhooks here
+
+One public hostname fronts the whole lab. The gateway is the only process bound
+to the outside; both apps listen on loopback and are reverse-proxied under a
+path prefix, so nothing else needs a port or a tunnel.
+
+| Public path | Serves |
+|---|---|
+| `/` | landing page: connect a space, pick a mode, launch |
+| `/relay/…` | the RELAY line-test console (loopback :8787) |
+| `/swml/…` | the SWML app: webhooks and the test-suite UI at `/swml/ui` (loopback :8080) |
+
+The webhook base is derived from the environment at boot —
+`https://$REPLIT_DEV_DOMAIN/swml` — and injected into the SWML app as
+`PUBLIC_URL`. Arming a scenario points the DID at `<base>/inbound`,
+`<base>/inbound/twostep`, or `<base>/inbound/request-flow`; `status_url` and the
+request-flow `/auth` URL come from the same base. Nothing needs to be set by
+hand.
+
+Overrides, if the lab ever moves behind something else:
+
+| Variable | Effect |
+|---|---|
+| `PWPOC_PUBLIC_ORIGIN` | the origin to advertise, e.g. `https://lab.example` |
+| `PUBLIC_URL` | the SWML webhook base outright, bypassing derivation |
+| `PWPOC_BIND` | gateway bind address (hosted default `0.0.0.0`, otherwise loopback) |
+
+Both child apps bind loopback on purpose, and `.replit` maps exactly one port
+(5000 → 80). If a `[[ports]]` entry for 8080 or 8787 ever appears there, it was
+added by the editor's port detector, not by the app: it publishes a child
+directly at `<domain>:<port>`, bypassing the gateway and its path prefix.
+Remove it.
+
+**Exposure:** the dev URL is public and unauthenticated. Anyone with the link
+can reach the consoles, read the SIP credentials the web phone registers with,
+and trigger billable test calls. Keep the URL private, or set
+`PWPOC_ALLOW_FORWARDED_CONTROL=0` to refuse proxied requests for the SWML
+phone credentials and test-call trigger (which also disables the web phone).
+
 ## Required secrets
 
 Set in Replit Secrets:
@@ -41,6 +80,12 @@ Set in Replit Secrets:
 | `SIGNALWIRE_PROJECT_ID` | Project ID from SignalWire Dashboard → API |
 | `SIGNALWIRE_TOKEN` | API token with Voice scope |
 | `SIGNALWIRE_SPACE_URL` | Bare hostname, e.g. `example.signalwire.com` |
+
+These three are the demo space's credentials. The gateway reconciles its stored
+copy (`console/spaces.json`) with them on every boot and probes them once,
+logging whether they were accepted — so correcting a secret and restarting is
+enough, with no file to edit. Spaces connected through the landing page keep
+their own credentials and are left alone.
 
 ## Tests
 
