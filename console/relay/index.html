@@ -362,6 +362,11 @@
 <script>
 'use strict';
 
+// Every request is relative to wherever this page is mounted. Served straight
+// off :8787 that is '' (unchanged); proxied by the gateway at /relay/ it is
+// '/relay', which is what makes one public hostname serve the whole lab.
+const BASE = location.pathname.replace(/\/[^/]*$/, '');
+
 // ── scenario definitions (mirror live/smoke.mjs rows) ────────────────────────
 const SCENARIOS = [
   { row: '1', friendly: 'Grandma calls, the child picks up', tech: 'inbound allow · SIP → SIP',
@@ -440,7 +445,7 @@ function updateDevUri() {
   document.querySelector('#dev-uri').textContent = uri ? `rings ${uri}` : 'rings the pwpoc_child simulator context';
 }
 (async () => {
-  const res = await fetch('/api/devices');
+  const res = await fetch(BASE + '/api/devices');
   const d = await res.json();
   sipDomain = d.domain;
   const sel = document.querySelector('#dev-select');
@@ -494,13 +499,13 @@ function stopRing() {
   if (wp.ringOsc) { clearInterval(wp.ringOsc.cadence); wp.ringOsc.ctx.close().catch(() => {}); wp.ringOsc = null; }
 }
 async function initWebphone() {
-  const res = await fetch('/api/webphone');
+  const res = await fetch(BASE + '/api/webphone');
   if (!res.ok) { wpStatus('not provisioned — build topology', 'missing'); return; }
   const cfg = await res.json();
   webphone = cfg;
   wp.el.id.textContent = `sip:${cfg.username}@${cfg.domain} · via ${cfg.wsServer}`;
   updateDevUri();
-  const { Web } = await import('/vendor/sipjs/index.js');
+  const { Web } = await import(BASE + '/vendor/sipjs/index.js');
   wp.su = new Web.SimpleUser(cfg.wsServer, {
     aor: `sip:${cfg.username}@${cfg.domain}`,
     userAgentOptions: {
@@ -615,7 +620,7 @@ function selectScenario(row) {
 }
 
 async function loadHistory(row) {
-  const res = await fetch(`/api/history/${row}`);
+  const res = await fetch(BASE + `/api/history/${row}`);
   const data = await res.json();
   runs[row] = { events: data.events, cdrs: data.cdrs, live: false };
   $('#ladder-sub').textContent = data.events.length
@@ -819,7 +824,7 @@ async function gstart(card) {
   if (busy && !guided.card) return; // a scenario/setup job owns the wire
   greset(card);
   const authDelay = Number($('#auth-delay').value) || 1500;
-  const res = await fetch(`/api/guided/start?card=${card}&authDelay=${authDelay}`, { method: 'POST' });
+  const res = await fetch(BASE + `/api/guided/start?card=${card}&authDelay=${authDelay}`, { method: 'POST' });
   const out = await res.json();
   if (!res.ok) { $(`#gverdict-${card}`).textContent = out.error; return; }
 }
@@ -865,7 +870,7 @@ let guidedDelayMs = 1500;
 
 for (const card of ['allow', 'deny']) {
   $(`#gstart-${card}`).addEventListener('click', () => gstart(card));
-  $(`#gstop-${card}`).addEventListener('click', () => fetch('/api/guided/stop', { method: 'POST' }));
+  $(`#gstop-${card}`).addEventListener('click', () => fetch(BASE + '/api/guided/stop', { method: 'POST' }));
 }
 
 // the guided cards' "wait Xs" always mirrors the dropdown
@@ -874,7 +879,7 @@ $('#auth-delay').addEventListener('change', () => {
   document.querySelectorAll('.g-delay').forEach((el) => { el.textContent = `${(ms / 1000).toFixed(1)}s`; });
 });
 
-const es = new EventSource('/api/events');
+const es = new EventSource(BASE + '/api/events');
 es.onmessage = (msg) => {
   const e = JSON.parse(msg.data);
   if (e.channel === 'call') {
@@ -975,17 +980,17 @@ document.addEventListener('click', async (ev) => {
     const params = new URLSearchParams();
     if (uri) params.set('child', uri);
     params.set('authDelay', delay);
-    await fetch(`/api/run/${run.dataset.run}?${params}`, { method: 'POST' });
+    await fetch(BASE + `/api/run/${run.dataset.run}?${params}`, { method: 'POST' });
   }
 });
-$('#btn-setup').addEventListener('click', () => !busy && fetch('/api/setup', { method: 'POST' }));
+$('#btn-setup').addEventListener('click', () => !busy && fetch(BASE + '/api/setup', { method: 'POST' }));
 $('#btn-teardown').addEventListener('click', () => {
   if (busy) return;
   if (confirm('Tear down the pwpoc-* topology on the demo space? Scenarios will need a rebuild afterward.')) {
-    fetch('/api/teardown', { method: 'POST' });
+    fetch(BASE + '/api/teardown', { method: 'POST' });
   }
 });
-$('#btn-tests').addEventListener('click', () => !busy && fetch('/api/tests', { method: 'POST' }));
+$('#btn-tests').addEventListener('click', () => !busy && fetch(BASE + '/api/tests', { method: 'POST' }));
 
 function setButtons() {
   document.querySelectorAll('[data-run], #btn-setup, #btn-teardown, #btn-tests').forEach((b) => {
@@ -1000,7 +1005,7 @@ function setButtons() {
 
 // ── topology status ──────────────────────────────────────────────────────────
 async function refreshStatus() {
-  const res = await fetch('/api/status');
+  const res = await fetch(BASE + '/api/status');
   const s = await res.json();
   const chip = $('#topo-chip');
   chip.classList.remove('ready', 'missing');

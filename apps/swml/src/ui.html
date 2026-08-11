@@ -329,6 +329,9 @@
 
 <script>
 'use strict';
+// Requests are relative to the mount point: '' when served at /ui straight off
+// :8080, '/swml' when the gateway proxies this page at /swml/ui.
+const BASE = location.pathname.replace(/\/[^/]*$/, '');
 const $ = (sel) => document.querySelector(sel);
 let CONFIG = {};
 let STATE = null;      // /api/state payload
@@ -506,7 +509,7 @@ async function openCode(file, find) {
   pre.textContent = 'loading…';
   $('#code-dialog').showModal();
   try {
-    if (!codeCache[file]) codeCache[file] = (await (await fetch('/api/code?file=' + encodeURIComponent(file))).json()).source;
+    if (!codeCache[file]) codeCache[file] = (await (await fetch(BASE + '/api/code?file=' + encodeURIComponent(file))).json()).source;
     const src = codeCache[file];
     const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
     const idx = src.indexOf(find);
@@ -688,7 +691,7 @@ function appendRaw(line) {
 }
 
 // ── stream ───────────────────────────────────────────────────────────────────
-const es = new EventSource('/api/evidence/stream');
+const es = new EventSource(BASE + '/api/evidence/stream');
 es.onopen = () => $('#sse-chip').classList.add('ready');
 es.onerror = () => $('#sse-chip').classList.remove('ready');
 es.onmessage = (msg) => { try { ingest(JSON.parse(msg.data)); } catch {} };
@@ -720,7 +723,7 @@ function applyState(s) {
 
 async function refreshState() {
   try {
-    const res = await fetch('/api/state');
+    const res = await fetch(BASE + '/api/state');
     const body = await res.json();
     CONFIG = body.config || {};
     const sel = $('#auth-delay');
@@ -742,7 +745,7 @@ document.addEventListener('click', async (ev) => {
     place.disabled = true;
     place.textContent = 'Placing…';
     try {
-      const res = await fetch('/api/place-call', {
+      const res = await fetch(BASE + '/api/place-call', {
         method: 'POST', headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ callerAllowed: place.dataset.place === 'true' }),
       });
@@ -766,7 +769,7 @@ document.addEventListener('click', async (ev) => {
   btn.disabled = true;
   const payload = { scenario: btn.dataset.arm };
   try {
-    const res = await fetch('/api/arm', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) });
+    const res = await fetch(BASE + '/api/arm', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) });
     const body = await res.json();
     if (!body.ok) errEl.textContent = 'patch failed: ' + (body.error || res.status);
     if (body.state) applyState(body.state);
@@ -776,7 +779,7 @@ document.addEventListener('click', async (ev) => {
 
 $('#auth-delay').addEventListener('change', async () => {
   const ms = Number($('#auth-delay').value) || 0;
-  await fetch('/api/check-delay', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ms }) });
+  await fetch(BASE + '/api/check-delay', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ms }) });
   await refreshState();
 });
 
@@ -792,7 +795,7 @@ async function bootPhone() {
   };
   let cfg;
   try {
-    const res = await fetch('/api/phone-config');
+    const res = await fetch(BASE + '/api/phone-config');
     if (!res.ok) {
       status('fail', res.status === 403 ? 'local browser only' : 'not configured');
       $('#phone-aor').textContent = res.status === 403

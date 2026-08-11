@@ -84,7 +84,9 @@ async function probeSpace({ spaceUrl, projectId, token }) {
 const SLOT_DEFS = {
   relay: {
     port: Number(process.env.PWPOC_CONSOLE_PORT || 8787),
-    url: () => `http://127.0.0.1:${SLOT_DEFS.relay.port}/`,
+    // Same-origin path, not a loopback URL: the gateway proxies it, so this
+    // works for a remote viewer over a tunnel as well as for the operator.
+    url: () => '/relay/',
     ready: () => `http://127.0.0.1:${SLOT_DEFS.relay.port}/`,
     spawn: (space, cell) =>
       spawn(process.execPath, [path.join(here, 'relay', 'server.mjs')], {
@@ -101,7 +103,7 @@ const SLOT_DEFS = {
   },
   swml: {
     port: Number(process.env.PWPOC_SWML_PORT || 8080),
-    url: () => `http://127.0.0.1:${SLOT_DEFS.swml.port}/ui`,
+    url: () => '/swml/ui',
     ready: () => `http://127.0.0.1:${SLOT_DEFS.swml.port}/healthz`,
     // On the demo space apps/swml/.env supplies the DID/endpoint/child wiring.
     // On any other space, resolve them from the space itself so /ui and the
@@ -214,11 +216,58 @@ const body = (req) =>
     req.on('end', () => { try { resolve(data ? JSON.parse(data) : {}); } catch (e) { reject(e); } });
   });
 
+/**
+ * Reverse proxy to a child app on loopback.
+ *
+ * This exists so one public hostname serves the whole lab. A quick tunnel
+ * grants exactly one hostname per tunnel and rate-limits new ones, so the
+ * cross-port `window.open('http://127.0.0.1:8787')` the landing page used to
+ * do cannot work for anyone but the operator.
+ *
+ * hop-by-hop headers are dropped: Node re-frames the body itself, and echoing
+ * the upstream's transfer-encoding on top of that corrupts the response.
+ */
+function proxy(req, res, port, path) {
+  const headers = { ...req.headers, host: `127.0.0.1:${port}` };
+  delete headers.connection;
+  delete headers['transfer-encoding'];
+  delete headers['accept-encoding']; // no compression to buffer
+
+  const upstream = http.request({ host: '127.0.0.1', port, method: req.method, path, headers }, (up) => {
+    const out = { ...up.headers };
+    delete out.connection;
+    delete out['transfer-encoding'];
+    res.writeHead(up.statusCode, out);
+    res.flushHeaders?.();
+    up.pipe(res);
+  });
+  upstream.on('error', (e) => {
+    if (!res.headersSent) json(res, 502, { error: `proxy to :${port} failed: ${e.message}` });
+    else res.end();
+  });
+  req.pipe(upstream);
+}
+
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
   const p = url.pathname;
 
   try {
+    // /relay/... and /swml/... belong to the child apps.
+    const mounted = p.match(/^\/(relay|swml)(\/.*)?$/);
+    if (mounted) {
+      const [, mode, rest] = mounted;
+      // The SWML app has no page at its root, only /ui. Relay serves its
+      // console at /, so /relay/ proxies straight through; bare /relay needs
+      // the trailing slash first or the child UI's relative BASE is wrong.
+      const landing = mode === 'swml' ? '/swml/ui' : '/relay/';
+      if (!rest || (mode === 'swml' && rest === '/')) {
+        res.writeHead(302, { location: landing });
+        return res.end();
+      }
+      return proxy(req, res, SLOT_DEFS[mode].port, rest + (url.search || ''));
+    }
+
     if (req.method === 'GET' && p === '/') {
       return send(res, 200, 'text/html; charset=utf-8', fs.readFileSync(path.join(here, 'index.html')));
     }

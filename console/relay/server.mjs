@@ -116,12 +116,20 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && p === '/api/events') {
       res.writeHead(200, {
         'content-type': 'text/event-stream',
-        'cache-control': 'no-store',
+        'cache-control': 'no-store, no-transform',
         connection: 'keep-alive',
+        // Behind a Cloudflare quick tunnel the edge buffers the body and the
+        // ladder shows nothing until the stream ends (measured). This header
+        // plus the padding comment below are what make it flush per-frame.
+        'x-accel-buffering': 'no',
       });
+      res.write(`:${' '.repeat(2048)}\n\n`);
       res.write(`data: ${JSON.stringify({ channel: 'hello', busy: job !== null })}\n\n`);
       clients.add(res);
-      req.on('close', () => clients.delete(res));
+      // Idle demos sit for minutes; a comment heartbeat keeps the tunnel hop
+      // and any intermediary from reaping a silent connection.
+      const beat = setInterval(() => res.write(': ping\n\n'), 15_000);
+      req.on('close', () => { clearInterval(beat); clients.delete(res); });
       return;
     }
 
