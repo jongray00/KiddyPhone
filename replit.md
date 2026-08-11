@@ -32,6 +32,25 @@ docs/           Findings and review reports
 - `apps/relay/src/signalwire/` — RELAY SDK integration (handler, connect-guard, app)
 - `apps/swml/src/signalwire/` — SWML artifacts (docs, rest, arm, caller)
 
+## Publishing
+
+`.replit` carries a `[deployment]` section: `run = ["npm", "run", "gateway"]`,
+target `vm`. Without it, publishing fails with "Invalid run command" — the
+`[workflows]` entries drive the Run button only and are not a deployment
+command.
+
+Reserved VM rather than autoscale, because this is a stateful lab: the gateway
+holds slot state in memory, runs the app it launched as a child process, keeps
+SSE connections open for the length of a demo, and in RELAY mode owns a
+persistent WebSocket to SignalWire. Scaling to zero drops a guided listener
+mid-call; a second instance has no idea what the first one started.
+
+The published hostname is picked up automatically — `REPLIT_DOMAINS` in a
+deployment, `REPLIT_DEV_DOMAIN` in the workspace — so the SWML webhook base
+follows the deployment without any change. Check that the three SignalWire
+secrets are present on the deployment itself; the deployment does not read the
+workspace's secrets pane.
+
 ## Routing and webhooks here
 
 One public hostname fronts the whole lab. The gateway is the only process bound
