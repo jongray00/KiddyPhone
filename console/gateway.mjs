@@ -362,6 +362,10 @@ process.on('SIGINT', () => process.exit(0));
 process.on('SIGTERM', () => process.exit(0));
 
 seedStore();
-server.listen(PORT, '0.0.0.0', () => {
-  console.log(`KiddyPhone test lab gateway: http://0.0.0.0:${PORT}`);
+// Loopback by default: the gateway holds space tokens and can launch apps,
+// so it must not face the LAN uninvited. Hosted platforms (Replit) need
+// 0.0.0.0 — detected there, or opt in anywhere with PWPOC_BIND.
+const BIND = process.env.PWPOC_BIND || (process.env.REPL_ID ? '0.0.0.0' : '127.0.0.1');
+server.listen(PORT, BIND, () => {
+  console.log(`KiddyPhone test lab gateway: http://${BIND}:${PORT}`);
 });
