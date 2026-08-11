@@ -137,3 +137,26 @@ test('D3: cache expires after ttl', async () => {
   await auth('x');
   assert.equal(lookups, 2);
 });
+
+test('direction is part of the cache key: inbound and outbound verdicts never share', async () => {
+  const seen = [];
+  const auth = memoizeAuthorizer(async (id, dir) => {
+    seen.push(`${dir}:${id}`);
+    // simulate divergent lists: grandma may call in, child may not dial her
+    return dir === 'inbound';
+  }, { ttlMs: 1000 });
+
+  assert.equal(await auth('+14803769009', 'inbound'), true);
+  assert.equal(await auth('+14803769009', 'outbound'), false, 'cached inbound ALLOW must not answer the outbound question');
+  assert.deepEqual(seen, ['inbound:+14803769009', 'outbound:+14803769009'], 'one lookup per direction');
+});
+
+test('same caller redialing within the TTL joins the cached verdict, per direction', async () => {
+  let lookups = 0;
+  const auth = memoizeAuthorizer(async () => { lookups += 1; return true; }, { ttlMs: 1000 });
+  await auth('+14803769009', 'inbound'); // first call
+  await auth('+14803769009', 'inbound'); // redial
+  assert.equal(lookups, 1);
+  await auth('+14803769009', 'outbound'); // different question, fresh lookup
+  assert.equal(lookups, 2);
+});

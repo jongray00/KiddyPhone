@@ -90,20 +90,25 @@ export class ConnectGuard {
  * cached, so an auth-API blip does not poison the cache.
  */
 export function memoizeAuthorizer(lookup, { ttlMs = 5000, now = Date.now } = {}) {
-  const cache = new Map(); // identity -> { promise, expiresAt }
+  const cache = new Map(); // direction|identity -> { promise, expiresAt }
 
-  return function authorize(identity) {
-    const entry = cache.get(identity);
+  // Direction is part of the key: "may this number call the child" and "may
+  // the child call this number" are different product questions, and a cached
+  // inbound verdict must never answer the outbound one (or vice versa) when
+  // the same identity appears on both sides within the TTL.
+  return function authorize(identity, direction = '') {
+    const key = `${direction}|${identity}`;
+    const entry = cache.get(key);
     if (entry && now() < entry.expiresAt) return entry.promise;
 
     const promise = Promise.resolve()
-      .then(() => lookup(identity))
+      .then(() => lookup(identity, direction))
       .catch((err) => {
-        cache.delete(identity);
+        cache.delete(key);
         throw err;
       });
 
-    cache.set(identity, { promise, expiresAt: now() + ttlMs });
+    cache.set(key, { promise, expiresAt: now() + ttlMs });
     return promise;
   };
 }

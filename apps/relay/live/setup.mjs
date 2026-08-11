@@ -48,16 +48,26 @@ for (const [kind, pathPart] of [
   console.log(`snapshot ${kind}: ${data.data.length}`);
 }
 
+// domain apps: reuse by name on re-runs — a tolerated 422 from a duplicate
+// POST returns an error body, and writing that into the manifest leaves
+// domainApps without name/domain and breaks every topology consumer.
+const existingApps = (await api('GET', 'domain_applications?page_size=200')).data;
 const domainApps = [];
 for (const name of ['inbound', 'outbound', 'child']) {
-  const app = await api('POST', 'domain_applications', {
-    name: `pwpoc-${name}`,
-    identifier: `pwpoc-${name}`,
-    call_handler: 'relay_context',
-    call_relay_context: `pwpoc_${name}`,
-  });
+  let app = existingApps.find((a) => a.name === `pwpoc-${name}`);
+  if (app) {
+    console.log(`reusing domain app ${app.name} -> ${app.domain}`);
+  } else {
+    app = await api('POST', 'domain_applications', {
+      name: `pwpoc-${name}`,
+      identifier: `pwpoc-${name}`,
+      call_handler: 'relay_context',
+      call_relay_context: `pwpoc_${name}`,
+    });
+    if (!app.id) throw new Error(`domain app pwpoc-${name} create failed: ${JSON.stringify(app)}`);
+    console.log(`domain app ${app.name} -> ${app.domain} (${app.call_relay_context})`);
+  }
   domainApps.push({ id: app.id, name: app.name, domain: app.domain, context: `pwpoc_${name}` });
-  console.log(`domain app ${app.name} -> ${app.domain} (${app.call_relay_context})`);
 }
 
 // numbers, in preference order per slot:

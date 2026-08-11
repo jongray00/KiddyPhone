@@ -42,14 +42,15 @@ export function createHandlers({ authorize, guard, registry, logger = console, c
    * it reads as "not allowed" — logged loudly, because the failure mode is a
    * parent who cannot reach their child, not an alert.
    */
-  async function checkAllowed(identity, callId) {
+  async function checkAllowed(identity, callId, direction) {
     try {
-      return (await authorize(identity)) === true;
+      return (await authorize(identity, direction)) === true;
     } catch (rejection) {
       const fault = toFault(rejection, 'authorize');
       logger.error('authorization lookup failed — failing closed', {
         callId,
         identity,
+        direction,
         message: fault.message,
       });
       return false;
@@ -71,10 +72,10 @@ export function createHandlers({ authorize, guard, registry, logger = console, c
     });
   }
 
-  async function runFlow(call, { identity, target }) {
+  async function runFlow(call, { identity, target, direction }) {
     registry.add(call);
     try {
-      const allowed = await checkAllowed(identity, call.callId);
+      const allowed = await checkAllowed(identity, call.callId, direction);
       logger.info('decision', { callId: call.callId, identity, allowed, state: call.state });
 
       if (!allowed) {
@@ -124,6 +125,7 @@ export function createHandlers({ authorize, guard, registry, logger = console, c
     return runFlow(call, {
       identity: call.from,
       target: { kind: 'sip', to: childSipUri, from: call.from },
+      direction: 'inbound',
     });
   }
 
@@ -153,7 +155,7 @@ export function createHandlers({ authorize, guard, registry, logger = console, c
       target = { kind: 'phone', to: toE164(rawTo, region), from: pstnFrom(call.from) };
     }
 
-    return runFlow(call, { identity, target });
+    return runFlow(call, { identity, target, direction: 'outbound' });
   }
 
   return { handleInbound, handleOutbound };
