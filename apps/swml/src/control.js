@@ -36,6 +36,14 @@ function sendJson(res, obj, status = 200) {
   res.end(JSON.stringify(obj));
 }
 
+// Did this request cross a proxy to get here? cf-* covers a Cloudflare tunnel;
+// x-forwarded-* covers everything else, including the lab gateway on a hosted
+// platform. Only a browser on the same machine arrives with none of them.
+const FORWARD_HEADERS = ['cf-ray', 'cf-connecting-ip', 'x-forwarded-for', 'x-forwarded-host'];
+function isForwarded(req) {
+  return FORWARD_HEADERS.some((h) => req.headers[h]);
+}
+
 async function readJsonBody(req) {
   const chunks = [];
   for await (const c of req) chunks.push(c);
@@ -65,7 +73,7 @@ async function tailLines(file, limit) {
   }
 }
 
-export function createControl({ armer, evidenceFile, codeDir, uiPath, config, runtime = null, phone = null, caller = null, whitelist = null, capture = null, callerNumber = null, statics = null }) {
+export function createControl({ armer, evidenceFile, codeDir, uiPath, config, runtime = null, phone = null, caller = null, whitelist = null, capture = null, callerNumber = null, statics = null, allowForwarded = false }) {
   async function handle(req, res, url) {
     const route = url.pathname;
     const liveConfig = () => ({ ...config, checkDelayMs: runtime?.checkDelayMs ?? config.checkDelayMs });
@@ -93,10 +101,11 @@ export function createControl({ armer, evidenceFile, codeDir, uiPath, config, ru
     }
 
     if (route === '/api/phone-config' && req.method === 'GET') {
-      // SIP credentials for the in-app web phone. Local browser only: any
-      // request that traversed the Cloudflare tunnel carries cf-ray and is
-      // refused, so the public console URL never leaks the registration.
-      if (req.headers['cf-ray'] || req.headers['cf-connecting-ip']) {
+      // SIP credentials for the in-app web phone. Refused for anything that
+      // came through a proxy, so a public console URL never leaks the
+      // registration — unless the deploy is inherently remote (hosted lab),
+      // where every browser is proxied and refusing means no web phone at all.
+      if (isForwarded(req) && !allowForwarded) {
         sendJson(res, { error: 'phone credentials are served to the local browser only' }, 403);
         return true;
       }
@@ -115,9 +124,8 @@ export function createControl({ armer, evidenceFile, codeDir, uiPath, config, ru
     }
 
     if (route === '/api/place-call' && req.method === 'POST') {
-      // Places a real, billable test call. Local browser only, same gate as
-      // the phone credentials.
-      if (req.headers['cf-ray'] || req.headers['cf-connecting-ip']) {
+      // Places a real, billable test call. Same gate as the phone credentials.
+      if (isForwarded(req) && !allowForwarded) {
         sendJson(res, { error: 'test calls are placed from the local browser only' }, 403);
         return true;
       }

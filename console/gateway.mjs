@@ -19,7 +19,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { repoRoot, loadRootEnv } from '../shared/env.mjs';
+import { repoRoot, loadRootEnv, readEnvFile, publicOrigin } from '../shared/env.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PWPOC_GATEWAY_PORT || 8790);
@@ -27,6 +27,18 @@ const STORE = path.join(here, 'spaces.json');
 const DEMO_CELL = '+14803769009';
 
 loadRootEnv();
+
+/**
+ * The public origin, and the webhook base derived from it.
+ *
+ * Everything the space calls back into reaches the gateway first and is
+ * proxied down to a child app, so the SWML app's public base is the origin
+ * plus its mount path — NOT its loopback port. An explicitly set PUBLIC_URL
+ * still wins: an operator pointing a tunnel somewhere specific means it.
+ */
+const PUBLIC_ORIGIN = publicOrigin();
+const SWML_PUBLIC_URL =
+  (process.env.PUBLIC_URL || (PUBLIC_ORIGIN ? `${PUBLIC_ORIGIN}/swml` : '')).replace(/\/$/, '');
 
 // ── space store ──────────────────────────────────────────────────────────────
 function readStore() {
@@ -48,21 +60,40 @@ function publicView(s) {
   };
 }
 
-// Seed the demo space from the root .env on first boot.
+/**
+ * Reconcile the demo space with the environment on every boot.
+ *
+ * SIGNALWIRE_SPACE_URL / _PROJECT_ID / _TOKEN are the source of truth for this
+ * entry, whether they arrive from the root .env or from a hosted platform's
+ * secrets. The store used to be seeded once and then frozen, so a corrected
+ * credential never reached the lab: the stale copy in spaces.json won every
+ * launch and the only fix was to hand-edit or delete the file.
+ *
+ * Spaces the operator connected through the UI are untouched — they have no
+ * environment to track. So is anything here the environment does not carry,
+ * which is the handset number.
+ */
 function seedStore() {
   const store = readStore();
-  if (!store.spaces.some((s) => s.id === 'demo') && process.env.SIGNALWIRE_SPACE_URL) {
-    store.spaces.unshift({
-      id: 'demo',
-      label: 'SignalWire demo space',
-      spaceUrl: process.env.SIGNALWIRE_SPACE_URL,
-      projectId: process.env.SIGNALWIRE_PROJECT_ID,
-      token: process.env.SIGNALWIRE_TOKEN,
-      sipDomain: null, // filled by the first probe
-      cell: DEMO_CELL,
-    });
-    writeStore(store);
+  const spaceUrl = process.env.SIGNALWIRE_SPACE_URL;
+  const projectId = process.env.SIGNALWIRE_PROJECT_ID;
+  const token = process.env.SIGNALWIRE_TOKEN;
+  if (!spaceUrl) return store;
+
+  let demo = store.spaces.find((s) => s.id === 'demo');
+  if (!demo) {
+    demo = { id: 'demo', label: 'SignalWire demo space', cell: DEMO_CELL, sipDomain: null };
+    store.spaces.unshift(demo);
   }
+  // The SIP domain is a probe result about one space on one credential. If
+  // either moved, it is no longer an answer about anything — drop it and let
+  // the next launch re-probe.
+  if (demo.spaceUrl !== spaceUrl || demo.projectId !== projectId || demo.token !== token) {
+    demo.sipDomain = null;
+  }
+  Object.assign(demo, { spaceUrl, projectId, token });
+  demo.cell = demo.cell || DEMO_CELL;
+  writeStore(store);
   return store;
 }
 
@@ -105,32 +136,78 @@ const SLOT_DEFS = {
     port: Number(process.env.PWPOC_SWML_PORT || 8080),
     url: () => '/swml/ui',
     ready: () => `http://127.0.0.1:${SLOT_DEFS.swml.port}/healthz`,
-    // On the demo space apps/swml/.env supplies the DID/endpoint/child wiring.
-    // On any other space, resolve them from the space itself so /ui and the
-    // armer work without a hand-written .env (pwpoc-named resources first).
-    extraEnv: async (space) => {
-      if (space.id === 'demo') return {};
+    /**
+     * Resolve the SWML app's call wiring from the space itself.
+     *
+     * This used to run for non-demo spaces only, with the demo space relying on
+     * a hand-written apps/swml/.env. There is no such file on a hosted deploy,
+     * and the app refuses to start without a child URI and a non-empty
+     * whitelist — so the demo space could never launch here. Resolution now
+     * runs for every space, and anything apps/swml/.env does define is left
+     * alone (that file is the operator's explicit wiring).
+     *
+     * Returns { env, warning }: what the space could not tell us must not cost
+     * us what it never had to. The webhook base and the handset are known
+     * without a round trip, so a rejected token degrades the launch instead of
+     * emptying it.
+     */
+    extraEnv: async (space, cell) => {
+      const declared = readEnvFile(path.join(repoRoot, 'apps', 'swml', '.env'));
+      const env = {};
+      const set = (key, value) => {
+        if (value && !declared[key]) env[key] = value;
+      };
+
+      // The space POSTs to the gateway's public hostname, which proxies /swml/*
+      // down to this child; its own port is never reachable from outside.
+      set('PUBLIC_URL', SWML_PUBLIC_URL);
+      // The handset under test is the whitelist. The UI's allow/deny toggle
+      // flips this same number at runtime; it only has to be there at boot.
+      set('WHITELIST_PSTN', cell);
+      set('PWPOC_CALLER_NUMBER', cell);
+
       const auth = Buffer.from(`${space.projectId}:${space.token}`).toString('base64');
+      // Non-ok has to be loud. Swallowing it into an empty list made a rejected
+      // token look identical to a space with nothing provisioned on it, and the
+      // app downstream could only report the symptom ("... is required").
       const get = async (p) => {
         const res = await fetch(`https://${space.spaceUrl}/api/relay/rest/${p}?page_size=200`, {
           headers: { Authorization: `Basic ${auth}` },
           signal: AbortSignal.timeout(8000),
         });
-        return res.ok ? (await res.json()).data ?? [] : [];
+        if (!res.ok) throw new Error(`GET ${p} on ${space.spaceUrl}: HTTP ${res.status}`);
+        return (await res.json()).data ?? [];
       };
-      const [numbers, endpoints] = await Promise.all([get('phone_numbers'), get('endpoints/sip')]);
+      let numbers = [];
+      let endpoints = [];
+      try {
+        [numbers, endpoints] = await Promise.all([get('phone_numbers'), get('endpoints/sip')]);
+      } catch (e) {
+        return { env, warning: `resolving space wiring failed: ${String(e?.message ?? e)}` };
+      }
+
       const did = numbers.find((n) => n.name === 'pwpoc-inbound-did') ?? numbers[0];
-      const child = endpoints.find((e) => e.username === 'pwpoc-webphone') ?? endpoints[0];
-      const env = {};
+      const dead = endpoints.find((e) => e.username === 'pwpoc-dead');
+      const child =
+        endpoints.find((e) => e.username === 'pwpoc-webphone') ??
+        endpoints.find((e) => e.username !== dead?.username);
+
       if (did) {
-        env.PWPOC_DID_ID = did.id;
-        env.PWPOC_DID_NUMBER = did.number;
+        set('PWPOC_DID_ID', did.id);
+        set('PWPOC_DID_NUMBER', did.number);
       }
       if (child && space.sipDomain) {
-        env.PWPOC_SIP_ENDPOINT_ID = child.id;
-        env.KIDDYPHONE_ENDPOINT_SIP_URI = `sip:${child.username}@${space.sipDomain}`;
+        set('PWPOC_SIP_ENDPOINT_ID', child.id);
+        set('KIDDYPHONE_ENDPOINT_SIP_URI', `sip:${child.username}@${space.sipDomain}`);
       }
-      return env;
+      // The two-step flow parks the caller against an endpoint that exists but
+      // is registered nowhere, so the connect rings until timeout. pwpoc-dead
+      // is that endpoint by convention; name it even when absent so the park
+      // document is well-formed and the failure is a ring-out, not a bad doc.
+      if (space.sipDomain) {
+        set('KIDDYPHONE_DEAD_SIP_URI', `sip:${dead?.username ?? 'pwpoc-dead'}@${space.sipDomain}`);
+      }
+      return { env };
     },
     spawn: (space, cell, extra = {}) =>
       spawn(process.execPath, [path.join(repoRoot, 'apps', 'swml', 'src', 'server.js')], {
@@ -176,9 +253,20 @@ async function launchSlot(mode, space, cell) {
   }
   stopSlot(mode);
 
-  const extra = def.extraEnv ? await def.extraEnv(space).catch(() => ({})) : {};
+  let extra = {};
+  let warning = null;
+  if (def.extraEnv) {
+    try {
+      ({ env: extra = {}, warning = null } = await def.extraEnv(space, cell));
+    } catch (e) {
+      warning = `resolving space wiring failed: ${String(e?.message ?? e)}`;
+    }
+  }
   const child = def.spawn(space, cell, extra);
   const slot = { child, spaceId: space.id, log: [], startedAt: Date.now() };
+  // A resolution failure is why the app is about to complain about missing
+  // wiring; without this the log tail shows only the downstream symptom.
+  if (warning) slot.log.push(warning);
   const keep = (chunk) => {
     for (const line of String(chunk).split('\n')) {
       if (line.trim()) slot.log.push(line.slice(0, 300));
@@ -326,14 +414,21 @@ const server = http.createServer(async (req, res) => {
       if (!space) return json(res, 404, { error: `unknown space: ${spaceId}` });
       const useCell = (cell || space.cell || (space.id === 'demo' ? DEMO_CELL : '')).trim();
       if (useCell !== space.cell) { space.cell = useCell; writeStore(store); }
+      let probeError = null;
       if (!space.sipDomain) {
         try {
           const probe = await probeSpace(space);
           space.sipDomain = probe.sipDomain;
           writeStore(store);
-        } catch { /* probe failure surfaces inside the apps, not here */ }
+        } catch (e) {
+          // Not fatal — RELAY mode needs no SIP domain — but it is the root
+          // cause of most launch failures, so it travels with the response
+          // instead of being inferred from a downstream complaint.
+          probeError = String(e?.message ?? e);
+        }
       }
       const state = await launchSlot(mode, space, useCell);
+      if (probeError) state.logTail = [`credential probe failed: ${probeError}`, ...state.logTail];
       return json(res, state.running ? 200 : 502, state);
     }
 
@@ -346,7 +441,11 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === 'GET' && p === '/api/state') {
       return json(res, 200, {
-        gateway: { port: PORT },
+        gateway: {
+          port: PORT,
+          publicOrigin: PUBLIC_ORIGIN || null,
+          swmlWebhookBase: SWML_PUBLIC_URL || null,
+        },
         slots: { relay: slotState('relay'), swml: slotState('swml') },
       });
     }
@@ -368,4 +467,21 @@ seedStore();
 const BIND = process.env.PWPOC_BIND || (process.env.REPL_ID ? '0.0.0.0' : '127.0.0.1');
 server.listen(PORT, BIND, () => {
   console.log(`KiddyPhone test lab gateway: http://${BIND}:${PORT}`);
+  if (PUBLIC_ORIGIN) console.log(`  public origin: ${PUBLIC_ORIGIN}`);
+  console.log(
+    SWML_PUBLIC_URL
+      ? `  SWML webhook base: ${SWML_PUBLIC_URL}  (armed handlers POST here)`
+      : '  SWML webhook base: none — set PWPOC_PUBLIC_ORIGIN or PUBLIC_URL, or use RELAY mode',
+  );
+
+  // Say at boot whether the stored credentials actually work. Discovering it at
+  // first launch instead costs a round trip through the UI, and a rejected
+  // token looks like a broken app from there.
+  const demo = readStore().spaces.find((s) => s.id === 'demo');
+  if (demo) {
+    probeSpace(demo).then(
+      ({ sipDomain }) => console.log(`  ${demo.spaceUrl}: credentials accepted, sip domain ${sipDomain}`),
+      (e) => console.warn(`  ${demo.spaceUrl}: ${String(e?.message ?? e)} — check SIGNALWIRE_PROJECT_ID / _TOKEN / _SPACE_URL`),
+    );
+  }
 });

@@ -79,6 +79,14 @@ npm install
 npm run gateway     # http://127.0.0.1:8790
 ```
 
+One hostname serves the whole lab: the gateway is the only listener facing
+outward, and it reverse-proxies the RELAY console under `/relay/` and the SWML
+app under `/swml/`. On a hosted deploy the public origin is read from the
+environment and the SWML webhook base (`<origin>/swml`) is injected into that
+app, so armed handlers, `status_url` callbacks, and the request-flow `/auth`
+URL all point at reachable addresses without a tunnel or a hand-written
+`PUBLIC_URL`. Set `PWPOC_PUBLIC_ORIGIN` to advertise a different origin.
+
 The landing page connects a SignalWire space (the bundled demo space works out of
 the box), offers the RELAY or SWML implementation, and launches the one you pick.
 Credentials are validated with a read-only `sip_profile` probe, stored server-side,

@@ -16,17 +16,25 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { scopedPath } from '../../shared/provision.mjs';
+import { loadRootEnv } from '../../shared/env.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(here, '..', '..');
 const relayApp = path.join(root, 'apps', 'relay');
 const PORT = Number(process.env.PWPOC_CONSOLE_PORT || 8787);
 
-for (const line of fs.readFileSync(path.join(root, '.env'), 'utf8').split('\n')) {
-  const m = line.match(/^([A-Z0-9_]+)=(.*)$/);
-  if (m && !process.env[m[1]]) process.env[m[1]] = m[2];
-}
+// The gateway injects the selected space's credentials; the root .env is only
+// the by-hand fallback and is absent on a hosted deploy (secrets come from the
+// platform's environment instead). Reading it unconditionally used to abort the
+// process here, which the gateway could only report as an ENOENT log tail.
+loadRootEnv();
 const SPACE = process.env.SIGNALWIRE_SPACE_URL;
+if (!SPACE || !process.env.SIGNALWIRE_PROJECT_ID || !process.env.SIGNALWIRE_TOKEN) {
+  console.warn(
+    'SignalWire credentials missing (SIGNALWIRE_SPACE_URL / _PROJECT_ID / _TOKEN): ' +
+      'the console will serve but every space call fails until they are set',
+  );
+}
 const auth = Buffer.from(
   `${process.env.SIGNALWIRE_PROJECT_ID}:${process.env.SIGNALWIRE_TOKEN}`
 ).toString('base64');
@@ -83,6 +91,10 @@ async function topologyStatus() {
     const res = await fetch(`https://${SPACE}/api/relay/rest/${p}?page_size=200`, {
       headers: { Authorization: `Basic ${auth}` },
     });
+    // A rejected token answers "Unauthorized" in plain text; parsing that as
+    // JSON reported a SyntaxError, which reads like a bug in the console
+    // rather than the credential problem it is.
+    if (!res.ok) throw new Error(`GET ${p} on ${SPACE}: HTTP ${res.status}`);
     return (await res.json()).data ?? [];
   };
   const [apps, numbers] = await Promise.all([get('domain_applications'), get('phone_numbers')]);
