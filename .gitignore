@@ -11,6 +11,7 @@ apps/relay/live/topology*.json
 apps/relay/live/inventory-pre-*.json
 apps/relay/live/observed-from.json
 apps/relay/live/row*-cdr.json
+apps/relay/live/evidence-*
 apps/swml/evidence/
 *.log
 

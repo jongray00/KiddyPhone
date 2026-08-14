@@ -33,8 +33,13 @@ promptly — use voice/logs).
 ## Master-context open items this run closes
 
 - **"Confirm the one-offer behavior with the connect issued at ~1.5 s, not immediately."**
-  Confirmed. Rows 1, 2, 4, 6 all issued the connect ~1.5 s after the offer (simulating
-  KiddyPhone's stated auth time) and every row saw exactly 1 offer, 1 call id.
+  Confirmed for these rows. Rows 1, 2, 4, 6 all issued the connect ~1.5 s after the
+  offer (simulating KiddyPhone's stated auth time) and every row saw exactly 1 offer,
+  1 call id. **Scope note (2026-08-14):** this holds while the connect resolves inside
+  the platform's ~20 s dial window, which every row here did (10 s timeout). A connect
+  asked to ring longer is killed by the platform at ~20 s and the caller is re-offered
+  under a NEW call id — the long-ring matrix in `docs/longring-findings.md` measures
+  that boundary and what to do about it.
 - **"Test the outbound path"** (was KiddyPhone's item; never exercised live). Done, row 4
   and row 5, including the ATA-digits-as-SIP-user shape and deny.
 - **U8 on PSTN, reconfirmed on fresh DIDs:** billing starts at bridge on carrier legs in

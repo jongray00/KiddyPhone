@@ -17,6 +17,7 @@ function makeFakeCall(opts = {}) {
     context = 'pwpoc_inbound',
     connectRejection = null,
     hangupRejection = null,
+    ttsRejection = null,
   } = opts;
   // D7's whole point is an undefined resolution, so a default parameter would
   // swallow the case — distinguish "absent" from "explicitly undefined".
@@ -47,6 +48,17 @@ function makeFakeCall(opts = {}) {
       call.counts.hangup += 1;
       call.hangupReasons.push(reason);
       if (hangupRejection) throw hangupRejection;
+    },
+    ttsTexts: [],
+    async playTTS({ text } = {}) {
+      if (ttsRejection) throw ttsRejection;
+      call.counts.playTTS = (call.counts.playTTS ?? 0) + 1;
+      call.ttsTexts.push(text);
+      return { async ended() {} };
+    },
+    async recordAudio() {
+      call.counts.record = (call.counts.record ?? 0) + 1;
+      return { async ended() {} };
     },
     disconnected: () =>
       new Promise((r) => {
@@ -83,9 +95,11 @@ function makeDeps(overrides = {}) {
       connectDeadlineMs: 500,
       dialTimeoutSec: 30,
       region: 'US',
+      ...(overrides.configExtra ?? {}),
     },
     ...overrides,
   };
+  delete deps.configExtra;
   return { deps, lookups };
 }
 
@@ -292,4 +306,96 @@ test('outbound to a non-whitelisted destination is declined', async () => {
   await handleOutbound(call);
   assert.equal(call.counts.connect, 0);
   assert.deepEqual(call.hangupReasons, ['decline']);
+});
+
+// ── initiator/joiner: a duplicate delivery must not adopt the bridge ─────────
+
+test('duplicate offer joining an in-flight connect stands down without holding or hanging up', async () => {
+  const { deps } = makeDeps();
+  const { handleInbound } = createHandlers(deps);
+  const initiator = makeFakeCall({ callId: 'id-1' });
+  const joiner = makeFakeCall({ callId: 'id-2' });
+
+  const p1 = handleInbound(initiator);
+  const p2 = handleInbound(joiner);
+
+  // The joiner must finish while the initiator is still bridged: it neither
+  // awaits disconnected() on its own (wrong) call object nor hangs it up.
+  const joinerFinished = await Promise.race([
+    p2.then(() => true),
+    new Promise((r) => setTimeout(() => r(false), 100)),
+  ]);
+  assert.equal(joinerFinished, true, 'joiner stood down while the bridge lives');
+  assert.equal(joiner.counts.hangup, 0, 'joiner never touches its call');
+  assert.equal(joiner.counts.answer, 0);
+
+  initiator.endPeerCall();
+  await p1;
+  assert.equal(initiator.counts.hangup, 1, 'initiator owns the teardown');
+});
+
+// ── no-answer actions (dial timeout, failedReason noAnswer) ──────────────────
+
+const NO_ANSWER = { connectState: 'failed', failedReason: 'noAnswer', callId: 'x' };
+
+test('noAnswerAction decline (default): release the unanswered leg, no media', async () => {
+  const { deps } = makeDeps();
+  const { handleInbound } = createHandlers(deps);
+  const call = makeFakeCall({ connectRejection: NO_ANSWER });
+  await handleInbound(call);
+  assert.equal(call.counts.answer, 0);
+  assert.equal(call.counts.playTTS ?? 0, 0);
+  assert.equal(call.counts.hangup, 1);
+});
+
+test('noAnswerAction early-media-message: TTS on the UNANSWERED leg, then decline', async () => {
+  const { deps } = makeDeps({ configExtra: { noAnswerAction: 'early-media-message', noAnswerMessage: 'try later' } });
+  const { handleInbound } = createHandlers(deps);
+  const call = makeFakeCall({ connectRejection: NO_ANSWER });
+  await handleInbound(call);
+  assert.equal(call.counts.answer, 0, 'early media must not answer (that would bill)');
+  assert.deepEqual(call.ttsTexts, ['try later']);
+  assert.equal(call.counts.hangup, 1);
+});
+
+test('noAnswerAction voicemail: answer deliberately, prompt, record, hang up', async () => {
+  const { deps } = makeDeps({ configExtra: { noAnswerAction: 'voicemail', noAnswerMessage: 'leave a message' } });
+  const { handleInbound } = createHandlers(deps);
+  const call = makeFakeCall({ connectRejection: NO_ANSWER });
+  await handleInbound(call);
+  assert.equal(call.counts.answer, 1, 'voicemail is the one flow that answers — billing starts here by design');
+  assert.deepEqual(call.ttsTexts, ['leave a message']);
+  assert.equal(call.counts.record, 1);
+  assert.equal(call.counts.hangup, 1);
+});
+
+// ── busy action (failedReason busy) ──────────────────────────────────────────
+
+const BUSY = { connectState: 'failed', failedReason: 'busy', callId: 'x' };
+
+test('busyAction early-media-busy: busy notice on the unanswered leg, then release', async () => {
+  const { deps } = makeDeps({ configExtra: { busyAction: 'early-media-busy', busyMessage: 'line busy' } });
+  const { handleInbound } = createHandlers(deps);
+  const call = makeFakeCall({ connectRejection: BUSY });
+  await handleInbound(call);
+  assert.equal(call.counts.answer, 0);
+  assert.deepEqual(call.ttsTexts, ['line busy']);
+  assert.equal(call.counts.hangup, 1);
+});
+
+test('busyAction default: plain release, media failures never crash the flow', async () => {
+  const { deps } = makeDeps();
+  const { handleInbound } = createHandlers(deps);
+  const call = makeFakeCall({ connectRejection: BUSY, ttsRejection: { code: '404', message: 'Call not found' } });
+  await handleInbound(call);
+  assert.equal(call.counts.playTTS ?? 0, 0);
+  assert.equal(call.counts.hangup, 1);
+});
+
+test('early-media action absorbs a TTS failure on an already-dead leg and still releases', async () => {
+  const { deps } = makeDeps({ configExtra: { busyAction: 'early-media-busy', busyMessage: 'line busy' } });
+  const { handleInbound } = createHandlers(deps);
+  const call = makeFakeCall({ connectRejection: BUSY, ttsRejection: { code: '404', message: 'Call not found' } });
+  await handleInbound(call);
+  assert.equal(call.counts.hangup, 1, 'the leg is still released');
 });

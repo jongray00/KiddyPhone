@@ -41,3 +41,36 @@ test('missing child SIP URI refuses to start', () => {
   const { PWPOC_CHILD_SIP_URI, ...rest } = goodEnv;
   assert.throws(() => loadConfig(rest), /PWPOC_CHILD_SIP_URI/);
 });
+
+// ── no-answer / busy actions and the sub-20s timeout default ────────────────
+
+test('dial timeout defaults to 18 — inside the platform ~20s re-offer window', async () => {
+  
+  const cfg = loadConfig(goodEnv);
+  assert.equal(cfg.dialTimeoutSec, 18);
+});
+
+test('no-answer and busy actions default to decline and accept the known values', async () => {
+  
+  const cfg = loadConfig(goodEnv);
+  assert.equal(cfg.noAnswerAction, 'decline');
+  assert.equal(cfg.busyAction, 'decline');
+
+  const custom = loadConfig({
+    ...goodEnv,
+    PWPOC_NO_ANSWER_ACTION: 'voicemail',
+    PWPOC_NO_ANSWER_MESSAGE: 'leave a message',
+    PWPOC_BUSY_ACTION: 'early-media-busy',
+    PWPOC_BUSY_MESSAGE: 'busy now',
+  });
+  assert.equal(custom.noAnswerAction, 'voicemail');
+  assert.equal(custom.noAnswerMessage, 'leave a message');
+  assert.equal(custom.busyAction, 'early-media-busy');
+  assert.equal(custom.busyMessage, 'busy now');
+});
+
+test('an unknown action refuses to start rather than silently declining', async () => {
+  
+  assert.throws(() => loadConfig({ ...goodEnv, PWPOC_NO_ANSWER_ACTION: 'ring-forever' }), /PWPOC_NO_ANSWER_ACTION/);
+  assert.throws(() => loadConfig({ ...goodEnv, PWPOC_BUSY_ACTION: 'shout' }), /PWPOC_BUSY_ACTION/);
+});

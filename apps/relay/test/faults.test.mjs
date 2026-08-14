@@ -87,3 +87,15 @@ test('safeDescribe handles circular objects', () => {
   a.self = a;
   assert.equal(typeof safeDescribe(a), 'string');
 });
+
+// ── failedReason: routing datum for no-answer / busy / platform-window ───────
+
+test('failedReason reads the SDK dial-failure shape, raw or through toFault', async () => {
+  const { toFault, failedReason } = await import('../src/faults.js');
+  const raw = { connectState: 'failed', failedReason: 'noAnswer', callId: 'x' };
+  assert.equal(failedReason(raw), 'noAnswer');
+  assert.equal(failedReason(toFault(raw, 'connect')), 'noAnswer');
+  assert.equal(failedReason({ code: '409' }), null);
+  assert.equal(failedReason(undefined), null);
+  assert.equal(failedReason(toFault(Symbol('junk'), 'connect')), null);
+});

@@ -24,12 +24,12 @@ const RESOURCE_PATH = 'api/fabric/resources/swml_scripts';
  * Compile the current whitelist to a static SWML document. `keys` is the
  * whitelist's Set of 'pstn:+E164' / 'sip:user@host' entries.
  */
-export function compileStatic({ keys, childUri }) {
+export function compileStatic({ keys, childUri, timeout = 30 }) {
   const pstn = [...keys]
     .filter((k) => k.startsWith('pstn:'))
     .map((k) => k.slice('pstn:'.length));
   const allowed = [
-    { connect: { to: childUri, from: '%{call.from}', timeout: 30, answer_on_bridge: true } },
+    { connect: { to: childUri, from: '%{call.from}', timeout, answer_on_bridge: true } },
     { hangup: {} },
   ];
   const denied = [{ hangup: { reason: 'decline' } }];

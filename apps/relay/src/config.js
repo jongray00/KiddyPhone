@@ -31,6 +31,14 @@ export function loadConfig(env = process.env) {
     throw new Error('whitelist is empty after normalization — refusing to start');
   }
 
+  const oneOf = (key, allowed, fallback) => {
+    const v = (env[key] || '').trim() || fallback;
+    if (!allowed.includes(v)) {
+      throw new Error(`${key} must be one of ${allowed.join(', ')} — got "${v}"`);
+    }
+    return v;
+  };
+
   return {
     project,
     token,
@@ -45,7 +53,18 @@ export function loadConfig(env = process.env) {
     authTtlMs: Number(env.PWPOC_AUTH_TTL_MS || 5000),
     authDelayMs: Number(env.PWPOC_AUTH_DELAY_MS || 0), // live tests inject 1500 here
     connectDeadlineMs: Number(env.PWPOC_CONNECT_DEADLINE_MS || 35_000),
-    dialTimeoutSec: Number(env.PWPOC_DIAL_TIMEOUT_SEC || 30),
+    // MEASURED: an unanswered connect lives ~20-21s before the platform kills
+    // it with failedReason "error" and re-offers the caller under a new call
+    // id — regardless of a larger timeout. 18 rings out CLEANLY (noAnswer,
+    // one offer, one id) with margin. Values >= 20 buy nothing but the
+    // error/re-offer cycle; longer effective ringing comes from handling the
+    // re-offers (each fresh offer restarts the window), not from this knob.
+    dialTimeoutSec: Number(env.PWPOC_DIAL_TIMEOUT_SEC || 18),
+    // What to do when the child rings out / is busy — see handler.js.
+    noAnswerAction: oneOf('PWPOC_NO_ANSWER_ACTION', ['decline', 'early-media-message', 'voicemail'], 'decline'),
+    noAnswerMessage: (env.PWPOC_NO_ANSWER_MESSAGE || 'The person you are calling is not available.').trim(),
+    busyAction: oneOf('PWPOC_BUSY_ACTION', ['decline', 'early-media-busy'], 'decline'),
+    busyMessage: (env.PWPOC_BUSY_MESSAGE || 'The line is busy. Please try again later.').trim(),
     drainTimeoutMs: Number(env.PWPOC_DRAIN_TIMEOUT_MS || 30 * 60 * 1000),
   };
 }

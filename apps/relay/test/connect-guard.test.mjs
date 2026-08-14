@@ -160,3 +160,28 @@ test('same caller redialing within the TTL joins the cached verdict, per directi
   await auth('+14803769009', 'outbound'); // different question, fresh lookup
   assert.equal(lookups, 2);
 });
+
+// ── initiator vs joiner: only the flight's owner may adopt the bridge ────────
+
+test('connectOnce marks the first caller initiator and concurrent callers joiners', async () => {
+  const guard = new ConnectGuard();
+  let release;
+  const gate = new Promise((r) => { release = r; });
+
+  const first = guard.connectOnce('k', async () => { await gate; return { peer: true }; });
+  const second = guard.connectOnce('k', () => { throw new Error('joiner must never run fn'); });
+  release();
+
+  const a = await first;
+  const b = await second;
+  assert.equal(a.role, 'initiator');
+  assert.equal(b.role, 'joiner');
+  assert.equal(a.outcome, b.outcome, 'joiner still learns the real outcome');
+});
+
+test('a fresh attempt after the previous one settled is initiator again', async () => {
+  const guard = new ConnectGuard();
+  await guard.connectOnce('k', async () => ({ peer: true }));
+  const again = await guard.connectOnce('k', async () => ({ peer: true }));
+  assert.equal(again.role, 'initiator');
+});

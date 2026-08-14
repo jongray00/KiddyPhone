@@ -1,18 +1,25 @@
 /**
- * handler.js — the flow. One idea: never call answer().
+ * handler.js — the flow. One idea: don't answer to decide.
  *
  * Issuing the connect on a leg still in `created` does two things at once: it
- * acknowledges the offer (the platform stops re-offering — one offer instead
- * of nineteen) and it defers the answer (the A-leg is not billed until the
- * B-leg bridges). That satisfies P1, P2 and P3 and removes D1–D4 at the root.
+ * acknowledges the offer (the platform stops re-offering while the connect
+ * lives) and it defers the answer (the A-leg is not billed until the B-leg
+ * bridges). That satisfies P1, P2 and P3 and removes D1–D4 at the root.
+ *
+ * MEASURED (2026-08-14 long-ring matrix): a connect only lives ~20s. Past
+ * that the platform kills it (failedReason "error") and, once we release the
+ * leg, re-offers the still-ringing caller under a NEW call id. Ringing longer
+ * than the window therefore means running this same flow again per re-offer —
+ * the guard's initiator/joiner roles keep each cycle to one connect.
  *
  * Blocked callers get hangup('decline') on the unanswered leg: their handset
- * never shows connected, no minute is billed, and they learn nothing about the
- * line. The cost, accepted deliberately: no greeting, no rejection message, no
- * voicemail — any media requires answering, and answering means billing.
+ * never shows connected, no minute is billed, and they learn nothing about
+ * the line. Ring-outs default to the same silent release; the configurable
+ * exceptions (early-media message, voicemail — the ONE path that answers,
+ * and therefore bills, deliberately) live in onNoAnswer/onBusy below.
  */
 
-import { toFault } from '../faults.js';
+import { toFault, failedReason } from '../faults.js';
 import { withDeadline } from '../deadline.js';
 import { Outcome, intentKey, shouldTeardown } from './connect-guard.js';
 import { parseSipUri, toE164 } from '../identity.js';
@@ -32,7 +39,68 @@ export async function safeHangup(call, reason = 'hangup', logger = console) {
 }
 
 export function createHandlers({ authorize, guard, registry, logger = console, config }) {
-  const { childSipUri, connectDeadlineMs, dialTimeoutSec, region = 'US', outboundCallerId = null } = config;
+  const {
+    childSipUri,
+    connectDeadlineMs,
+    dialTimeoutSec,
+    region = 'US',
+    outboundCallerId = null,
+    // What happens when the child rings out (failedReason noAnswer):
+    //   decline               silent release (default; the caller hears busy/failed)
+    //   early-media-message   speak on the UNANSWERED leg, then release — no
+    //                         answer, no voice minutes (TTS pennies only)
+    //   voicemail             the ONE flow that answers: prompt + record.
+    //                         Billing starts at the answer, by design.
+    noAnswerAction = 'decline',
+    noAnswerMessage = 'The person you are calling is not available.',
+    // What happens when the child is busy (failedReason busy):
+    //   decline | early-media-busy (spoken busy notice on the unanswered leg)
+    busyAction = 'decline',
+    busyMessage = 'The line is busy. Please try again later.',
+  } = config;
+
+  /** Best-effort early media: the leg may already be dead — never crash. */
+  async function speakUnanswered(call, text) {
+    try {
+      const playback = await call.playTTS({ text });
+      if (playback?.ended) await playback.ended();
+      return true;
+    } catch (rejection) {
+      const fault = toFault(rejection, 'early-media');
+      logger.debug('early media unavailable', { callId: call.callId, code: fault.code, message: fault.message });
+      return false;
+    }
+  }
+
+  async function onNoAnswer(call) {
+    if (noAnswerAction === 'early-media-message') {
+      await speakUnanswered(call, noAnswerMessage);
+      await safeHangup(call, 'decline', logger);
+      return;
+    }
+    if (noAnswerAction === 'voicemail') {
+      try {
+        await call.answer(); // deliberate: voicemail cannot exist without media both ways
+        const playback = await call.playTTS({ text: noAnswerMessage });
+        if (playback?.ended) await playback.ended();
+        const recording = await call.recordAudio({ endSilenceTimeout: 3 });
+        if (recording?.ended) await recording.ended();
+      } catch (rejection) {
+        const fault = toFault(rejection, 'voicemail');
+        logger.error('voicemail flow failed', { callId: call.callId, code: fault.code, message: fault.message });
+      }
+      await safeHangup(call, 'hangup', logger);
+      return;
+    }
+    await safeHangup(call, 'hangup', logger);
+  }
+
+  async function onBusy(call) {
+    if (busyAction === 'early-media-busy') {
+      await speakUnanswered(call, busyMessage);
+    }
+    await safeHangup(call, 'busy', logger);
+  }
 
   /** PSTN legs need an E.164 caller id; a SIP-URI `from` falls back to config. */
   const pstnFrom = (rawFrom) => toE164(rawFrom, region) || outboundCallerId || '';
@@ -84,11 +152,22 @@ export function createHandlers({ authorize, guard, registry, logger = console, c
         return;
       }
 
-      const { outcome, fault } = await connectUnanswered(call, target);
+      const { outcome, fault, role } = await connectUnanswered(call, target);
 
+      if (role === 'joiner') {
+        // This delivery joined a flight another call object initiated. Whatever
+        // the outcome, THAT call owns it — holding or hanging up this one acts
+        // on the wrong leg (the joiner's id is usually already dead, and the
+        // hangup was what tore down live bridges).
+        logger.info('another delivery owns this flight — standing down', {
+          callId: call.callId,
+          outcome,
+        });
+        return;
+      }
       if (outcome === Outcome.STOOD_DOWN) {
-        // Another delivery of this call owns the bridge. Log and walk away —
-        // hanging up here is what tore down live calls (D4).
+        // A 409 that still reached us (multi-worker, lock miss): someone
+        // else's connect is in flight. Log and walk away (D4).
         logger.info('connect already in flight, standing down', { callId: call.callId });
         return;
       }
@@ -97,11 +176,19 @@ export function createHandlers({ authorize, guard, registry, logger = console, c
         return;
       }
       if (shouldTeardown(outcome)) {
-        logger.error('connect failed, releasing caller', {
+        const reason = failedReason(fault);
+        logger.error('connect failed', {
           callId: call.callId,
+          reason,
           code: fault?.code ?? null,
           message: fault?.message ?? null,
         });
+        if (reason === 'noAnswer') return onNoAnswer(call);
+        if (reason === 'busy') return onBusy(call);
+        // 'error' is the platform ending a connect that outlived its ~20s
+        // window. Releasing the leg is what hands the still-ringing caller
+        // back as a fresh offer (measured) — the flow then runs again on the
+        // new call id: the "switch lines" pattern.
         await safeHangup(call, 'hangup', logger);
         return;
       }

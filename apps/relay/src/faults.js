@@ -65,6 +65,26 @@ export class Fault extends Error {
 }
 
 /**
+ * The dial-failure discriminator. A failed connect on 4.2.1 rejects with
+ * `{ connectState: 'failed', failedReason: 'noAnswer' | 'busy' | 'error' }`
+ * (no code). 'noAnswer' is a clean ring-out inside the platform's ~20s window,
+ * 'busy' is the destination refusing, and 'error' is the platform killing a
+ * connect whose timeout exceeded the window. Reads through a Fault's cause.
+ * Never throws; null when absent.
+ */
+export function failedReason(reason) {
+  const raw = reason instanceof Fault ? reason.cause : reason;
+  if (!raw || typeof raw !== 'object') return null;
+  let r;
+  try {
+    r = raw.failedReason;
+  } catch {
+    return null;
+  }
+  return typeof r === 'string' && r ? r : null;
+}
+
+/**
  * Convert any rejection reason into a Fault. Real Errors keep their identity in
  * `cause`; their message and numeric code carry through.
  */

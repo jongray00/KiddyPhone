@@ -29,6 +29,14 @@ test('compileStatic never answers or plays, and denies by silent decline', () =>
   assert.deepEqual(doc.sections.main[0].switch.default, [{ hangup: { reason: 'decline' } }]);
 });
 
+test('compileStatic honors a custom connect timeout and defaults to 30', () => {
+  const wl = buildWhitelist({ pstn: ['+14803769009'] });
+  const short = compileStatic({ keys: wl.keys, childUri: CHILD, timeout: 45 });
+  assert.equal(short.sections.main[0].switch.case['+14803769009'][0].connect.timeout, 45);
+  const dflt = compileStatic({ keys: wl.keys, childUri: CHILD });
+  assert.equal(dflt.sections.main[0].switch.case['+14803769009'][0].connect.timeout, 30);
+});
+
 test('compileStatic excludes SIP whitelist entries (webhook-mode feature)', () => {
   const wl = buildWhitelist({ pstn: [], sip: ['brian@example.sip.signalwire.com'] });
   const doc = compileStatic({ keys: wl.keys, childUri: CHILD });

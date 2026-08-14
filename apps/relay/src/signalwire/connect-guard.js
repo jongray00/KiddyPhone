@@ -58,21 +58,26 @@ export class ConnectGuard {
 
   /**
    * Run `fn` (the actual connect) at most once per key; concurrent callers with
-   * the same key await the same attempt. Resolves { outcome, response, fault }
-   * and never rejects — control flow downstream branches on the outcome, not on
-   * exceptions it cannot identify.
+   * the same key await the same attempt. Resolves { outcome, response, fault,
+   * role } and never rejects — control flow downstream branches on the outcome,
+   * not on exceptions it cannot identify.
+   *
+   * `role` says who owns the flight: the caller whose fn actually ran is the
+   * 'initiator'; everyone who joined an in-flight attempt is a 'joiner'. Only
+   * the initiator's call object is the bridged leg — a joiner adopting BRIDGED
+   * semantics would hold (and later hang up) the WRONG call.
    */
   connectOnce(key, fn) {
     const existing = this._inFlight.get(key);
-    if (existing) return existing;
+    if (existing) return existing.then((result) => ({ ...result, role: 'joiner' }));
 
     const attempt = (async () => {
       try {
         const response = expectResult(await fn(), 'connect');
-        return { outcome: Outcome.BRIDGED, response, fault: null };
+        return { outcome: Outcome.BRIDGED, response, fault: null, role: 'initiator' };
       } catch (reason) {
         const fault = toFault(reason, 'connect');
-        return { outcome: classify(reason), response: null, fault };
+        return { outcome: classify(reason), response: null, fault, role: 'initiator' };
       } finally {
         this._inFlight.delete(key);
       }
