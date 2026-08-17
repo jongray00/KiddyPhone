@@ -25,10 +25,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { SignalWire } from '@signalwire/realtime-api';
+import { SignalWire, Voice } from '@signalwire/realtime-api';
+import { RelayClient } from '@signalwire/sdk';
 import { loadConfig } from '../src/config.js';
 import { startApp } from '../src/signalwire/app.js';
 import { startApp as startServerSdkApp } from '../../serversdk/src/signalwire/app.js';
+import { callerIdentity } from '../../serversdk/src/signalwire/flow.js';
 import { isAllowed, buildWhitelist } from '../src/identity.js';
 import { safeDescribe } from '../src/faults.js';
 import { compileStatic, createStaticPusher } from '../../swml/src/signalwire/static.js';
@@ -63,6 +65,14 @@ const SCENARIOS = {
   // The customer's busy-signal bug, exception flow: connect throws, hangup('busy').
   'relayraw-busy': { target: 'relayraw', timeout: 18, child: 'busy' },
   'serversdk-busy': { target: 'serversdk', timeout: 18, child: 'busy' },
+  // The A/B pair for ticket verification: the customer's EXACT reported shape
+  // (try connect / catch hangup('busy')) on both SDKs, plus their ringback
+  // playlist variant and their exact production timeout of 20 (the window
+  // boundary — does it ring out clean or die by the platform kill?).
+  'relayraw-busy-ringback': { target: 'relayraw', timeout: 18, child: 'busy', ringback: true },
+  'serversdkraw-busy': { target: 'serversdkraw', timeout: 18, child: 'busy' },
+  'relayraw-t20-never': { target: 'relayraw', timeout: 20, child: 'never' },
+  'serversdkraw-t20-never': { target: 'serversdkraw', timeout: 20, child: 'never' },
   // Same window questions on the current server SDK…
   'serversdk-t18-never': { target: 'serversdk', timeout: 18, child: 'never' },
   'serversdk-t45-never': { target: 'serversdk', timeout: 45, child: 'never' },
@@ -211,9 +221,16 @@ async function startRelayRawTarget() {
       } catch { /* observer only */ }
       (async () => {
         await sleep(AUTH_DELAY_MS); // their whitelist API check
-        jlog('raw-connecting', { index, callId: call.callId });
+        jlog('raw-connecting', { index, callId: call.callId, ringback: !!spec.ringback });
         try {
-          const result = await call.connectSip({ from: call.from, to: CHILD_SIP, timeout: spec.timeout });
+          const connectArgs = { from: call.from, to: CHILD_SIP, timeout: spec.timeout };
+          if (spec.ringback) {
+            // The customer's exact ringback shape from the ticket snippet.
+            connectArgs.ringback = new Voice.Playlist({ volume: 1 }).add(
+              Voice.Playlist.Ringtone({ name: 'us', duration: 5 })
+            );
+          }
+          const result = await call.connectSip(connectArgs);
           jlog('raw-connect-resolved', { index, callId: call.callId, resultType: typeof result, state: call.state });
           await call.disconnected();
           jlog('raw-peer-disconnected', { index, callId: call.callId });
@@ -237,6 +254,58 @@ async function startRelayRawTarget() {
       })().catch((e) => jlog('raw-escaped', errShape(e)));
     },
   });
+  cleanups.push(() => client.disconnect());
+}
+
+/**
+ * The customer's EXACT reported shape on the CURRENT server SDK:
+ * try { connect } … failed/threw → hangup('busy'). No guard, no dedup —
+ * the point is wire-level fidelity to the ticket, not good architecture.
+ */
+async function startServerSdkRawTarget() {
+  await armRelayContext();
+  const client = new RelayClient({ project: PROJECT, token: TOKEN, contexts: [INBOUND_DID.context] });
+  client.onCall((call) => {
+    const index = offers.length;
+    recordOffer(call, { raw: true, sdk: 'serversdk' });
+    (async () => {
+      await sleep(AUTH_DELAY_MS); // their whitelist API check
+      jlog('raw-connecting', { index, callId: call.callId });
+      try {
+        const ack = await call.connect([[{
+          type: 'sip',
+          params: { to: CHILD_SIP, from: callerIdentity(call), timeout: spec.timeout },
+        }]]);
+        jlog('raw-connect-ack', { index, callId: call.callId, code: ack?.code ?? null });
+        const outcome = await call.waitFor(
+          'calling.call.connect',
+          (e) => {
+            const s = e?.connectState ?? e?.params?.connect_state ?? null;
+            return s === 'connected' || s === 'failed' || s === 'disconnected';
+          },
+          (spec.timeout + 15) * 1000,
+        );
+        const state = outcome?.connectState ?? outcome?.params?.connect_state ?? null;
+        jlog('raw-connect-outcome', { index, callId: call.callId, connectState: state });
+        if (state === 'connected') {
+          await call.waitForEnded();
+          jlog('raw-ended-after-bridge', { index, callId: call.callId });
+          return;
+        }
+        await call.hangup('busy'); // the ticket's exception flow, verbatim
+        jlog('raw-hangup-busy-ok', { index, callId: call.callId });
+      } catch (e) {
+        jlog('raw-connect-error', { index, callId: call.callId, ...errShape(e) });
+        try {
+          await call.hangup('busy');
+          jlog('raw-hangup-busy-ok', { index, callId: call.callId });
+        } catch (e2) {
+          jlog('raw-hangup-busy-failed', { index, callId: call.callId, ...errShape(e2) });
+        }
+      }
+    })().catch((e) => jlog('raw-escaped', errShape(e)));
+  });
+  await client.connect();
   cleanups.push(() => client.disconnect());
 }
 
@@ -317,7 +386,7 @@ async function startChildSim() {
 jlog('scenario-start', { scenario: arg, ...spec, authDelayMs: AUTH_DELAY_MS });
 
 await startChildSim();
-const targets = { relay: startRelayTarget, relayraw: startRelayRawTarget, serversdk: startServerSdkTarget, swml: startSwmlTarget };
+const targets = { relay: startRelayTarget, relayraw: startRelayRawTarget, serversdk: startServerSdkTarget, serversdkraw: startServerSdkRawTarget, swml: startSwmlTarget };
 await targets[spec.target]();
 jlog('target-ready', { target: spec.target });
 
