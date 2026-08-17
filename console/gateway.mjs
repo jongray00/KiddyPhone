@@ -22,7 +22,12 @@ import { fileURLToPath } from 'node:url';
 import { repoRoot, loadRootEnv, readEnvFile, publicOrigin } from '../shared/env.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const PORT = Number(process.env.PWPOC_GATEWAY_PORT || 8790);
+// PWPOC_GATEWAY_PORT is the explicit knob; PORT is what a hosting platform
+// sets. Hosted with neither, fall back to the port .replit maps to :80 rather
+// than the local default, which nothing out there would be forwarding.
+const PORT = Number(
+  process.env.PWPOC_GATEWAY_PORT || process.env.PORT || (process.env.REPL_ID ? 5000 : 8790),
+);
 const STORE = path.join(here, 'spaces.json');
 const DEMO_CELL = '+14803769009';
 

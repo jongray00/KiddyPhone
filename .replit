@@ -11,6 +11,15 @@ expertMode = true
 [userenv.shared]
 PWPOC_GATEWAY_PORT = "5000"
 
+# Publishing. Workflows above drive the Run button only; a deployment needs its
+# own run command. Reserved VM, not autoscale: the gateway keeps in-memory slot
+# state, spawns the app it launched as a child process, holds SSE connections
+# open for the length of a demo, and in RELAY mode owns a persistent WebSocket
+# to SignalWire. Scaling to zero or across instances breaks all four.
+[deployment]
+deploymentTarget = "cloudrun"
+run = ["npm", "run", "gateway"]
+
 [workflows]
 runButton = "Project"
 
