@@ -74,7 +74,7 @@ CDR `billing_ms` starts at that moment, so the call record reflects the conversa
 
 Checked that this codebase and its documents do not repeat any previously-corrected error:
 
-- **C1** (string codes on both packages): numeric comparison is the only comparison used. The owed *customer* correction to Brian remains unsent — comms item, §7.
+- **C1** (string codes on both packages): numeric comparison is the only comparison used. The owed *customer* correction to the customer remains unsent — comms item, §7.
 - **C2** (uuid deprecation warning): install notes say exactly one unrelated warning. ✔
 - **C3** (20.56s new-id boundary): never quoted 24–25s anywhere. ✔
 - **C4/C6/C7** (migration realities): recorded in migration notes; no code here wraps `call.connect()` for error handling on the new package. ✔
@@ -140,7 +140,7 @@ R1–R8 from the master context stand. This engagement adds:
 
 ## 7. Outstanding items ledger (nothing here is code)
 
-**Jon (customer comms):** correct the C1 sentence sent to Brian · send the amendment
+**Jon (customer comms):** correct the C1 sentence sent to the customer · send the amendment
 narrowing SWML to optional · answer (or relay) the customer Amhaus's unanswered question · brief
 the customer before the amendment lands · ask the customer the voicemail question (D16) · decide D12
 disclosure with Luca and Justin · file R1–R9 with the SDK team.

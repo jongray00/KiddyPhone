@@ -2,7 +2,7 @@
  * identity.js — whitelist policy. Pure, SDK-free, fail-closed.
  *
  * D12: a SIP identity is the user AND the whole host, anchored. Matching the
- * user part alone admitted sip:BRIAN@anything.com; a naive endsWith admitted
+ * user part alone admitted sip:PARENT@anything.com; a naive endsWith admitted
  * host-suffix confusion (acme.sip.signalwire.com.attacker.com). Both are
  * denied here by exact host equality after lowercasing.
  *

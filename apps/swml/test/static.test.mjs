@@ -6,7 +6,7 @@ import { buildWhitelist } from '../src/whitelist.js';
 const CHILD = 'sip:child@demo-x.sip.signalwire.com';
 
 test('compileStatic bakes PSTN entries into switch cases, connect-before-answer', () => {
-  const wl = buildWhitelist({ pstn: ['+14803769009', '(208) 379-9823'], sip: ['brian@example.sip.signalwire.com'] });
+  const wl = buildWhitelist({ pstn: ['+14803769009', '(208) 379-9823'], sip: ['parent@example.sip.signalwire.com'] });
   const doc = compileStatic({ keys: wl.keys, childUri: CHILD });
 
   assert.equal(doc.version, '1.0.0');
@@ -38,7 +38,7 @@ test('compileStatic honors a custom connect timeout and defaults to 30', () => {
 });
 
 test('compileStatic excludes SIP whitelist entries (webhook-mode feature)', () => {
-  const wl = buildWhitelist({ pstn: [], sip: ['brian@example.sip.signalwire.com'] });
+  const wl = buildWhitelist({ pstn: [], sip: ['parent@example.sip.signalwire.com'] });
   const doc = compileStatic({ keys: wl.keys, childUri: CHILD });
   assert.deepEqual(Object.keys(doc.sections.main[0].switch.case), []);
 });

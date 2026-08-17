@@ -73,6 +73,13 @@ const SCENARIOS = {
   'serversdkraw-busy': { target: 'serversdkraw', timeout: 18, child: 'busy' },
   'relayraw-t20-never': { target: 'relayraw', timeout: 20, child: 'never' },
   'serversdkraw-t20-never': { target: 'serversdkraw', timeout: 20, child: 'never' },
+  // The post-ring-out window question: after a clean 18s noAnswer, how much
+  // time does the app really have to act on the still-unanswered leg?
+  //   - the product path: guarded app answers immediately for voicemail
+  //   - the budget test: raw handler WAITS 10s past the ring-out, then
+  //     answers. If this works, there is no "20s total budget" on the leg.
+  'relay-t18-voicemail': { target: 'relay', timeout: 18, child: 'never', noAnswerAction: 'voicemail', talkMs: 6000 },
+  'relayraw-t18-lateanswer10': { target: 'relayraw', timeout: 18, child: 'never', lateVoicemailMs: 10_000, talkMs: 6000 },
   // Same window questions on the current server SDK…
   'serversdk-t18-never': { target: 'serversdk', timeout: 18, child: 'never' },
   'serversdk-t45-never': { target: 'serversdk', timeout: 45, child: 'never' },
@@ -189,6 +196,7 @@ async function startRelayTarget() {
     PWPOC_DIAL_TIMEOUT_SEC: String(spec.timeout),
     PWPOC_CONNECT_DEADLINE_MS: String((spec.timeout + 15) * 1000),
     PWPOC_OUTBOUND_CALLER_ID: INBOUND_DID.number,
+    ...(spec.noAnswerAction ? { PWPOC_NO_ANSWER_ACTION: spec.noAnswerAction } : {}),
   });
   const app = await startApp({
     config,
@@ -239,6 +247,25 @@ async function startRelayRawTarget() {
           jlog('raw-connect-error', { index, callId: call.callId, ...shape });
           if (Number(shape.code) === 409) {
             jlog('raw-409-standdown', { index, callId: call.callId });
+            return;
+          }
+          if (spec.lateVoicemailMs != null) {
+            // The budget test: hold the unanswered leg well past the ring-out,
+            // THEN answer for voicemail. Every step is timestamped so the
+            // "20s total budget" claim is testable against the wall clock.
+            jlog('late-waiting', { index, callId: call.callId, forMs: spec.lateVoicemailMs, state: call.state });
+            await sleep(spec.lateVoicemailMs);
+            try {
+              jlog('late-answering', { index, callId: call.callId, state: call.state });
+              await call.answer();
+              jlog('late-answered', { index, callId: call.callId, atMs: Date.now() - t0, state: call.state });
+              const playback = await call.playTTS({ text: 'You have reached voicemail, well after the ring window.' });
+              if (playback?.ended) await playback.ended();
+              jlog('late-tts-done', { index, callId: call.callId, atMs: Date.now() - t0 });
+            } catch (e2) {
+              jlog('late-answer-failed', { index, callId: call.callId, atMs: Date.now() - t0, ...errShape(e2) });
+            }
+            await call.hangup().catch((e2) => jlog('late-hangup-failed', errShape(e2)));
             return;
           }
           if (spec.child === 'busy') {

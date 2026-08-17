@@ -4,7 +4,7 @@ import { parseSipUri, normalizePstn, buildWhitelist } from '../src/whitelist.js'
 
 const wl = buildWhitelist({
   pstn: ['+15551234567'],
-  sip: [{ user: 'BRIAN', host: 'acme.sip.signalwire.com' }],
+  sip: [{ user: 'PARENT', host: 'acme.sip.signalwire.com' }],
   region: 'US',
 });
 
@@ -30,24 +30,24 @@ test('a number not on the list is denied', () => {
 });
 
 test('SIP identity with matching user and host is allowed', () => {
-  assert.equal(wl.isAllowed('sip:BRIAN@acme.sip.signalwire.com'), true);
+  assert.equal(wl.isAllowed('sip:PARENT@acme.sip.signalwire.com'), true);
 });
 
 test('SIP matching is case-insensitive on user and host', () => {
-  assert.equal(wl.isAllowed('sip:brian@ACME.SIP.signalwire.com'), true);
+  assert.equal(wl.isAllowed('sip:parent@ACME.SIP.signalwire.com'), true);
 });
 
 test('display-name angled SIP form is parsed', () => {
-  assert.equal(wl.isAllowed('"Brian B" <sip:BRIAN@acme.sip.signalwire.com>'), true);
+  assert.equal(wl.isAllowed('"Parent P" <sip:PARENT@acme.sip.signalwire.com>'), true);
 });
 
 // D12: the user part alone must never be enough.
 test('same user on a foreign domain is denied', () => {
-  assert.equal(wl.isAllowed('sip:BRIAN@attacker.com'), false);
+  assert.equal(wl.isAllowed('sip:PARENT@attacker.com'), false);
 });
 
 test('domain-suffix attack is denied (defeats naive endsWith)', () => {
-  assert.equal(wl.isAllowed('sip:BRIAN@acme.sip.signalwire.com.attacker.com'), false);
+  assert.equal(wl.isAllowed('sip:PARENT@acme.sip.signalwire.com.attacker.com'), false);
 });
 
 test('unknown user on the right domain is denied', () => {
@@ -68,7 +68,7 @@ test('parseSipUri strips params, ports, and handles sips:', () => {
 });
 
 test('normalizePstn rejects things that are not phone numbers', () => {
-  assert.equal(normalizePstn('BRIAN', 'US'), null);
+  assert.equal(normalizePstn('PARENT', 'US'), null);
   assert.equal(normalizePstn('', 'US'), null);
   assert.equal(normalizePstn(null, 'US'), null);
   assert.equal(normalizePstn('+15551234567', 'US'), '+15551234567');

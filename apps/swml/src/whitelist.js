@@ -7,7 +7,7 @@
  *
  * Two rules close the two live defects:
  *   D12: a SIP identity matches only when user AND full host both match, so
- *        sip:BRIAN@attacker.com and domain-suffix tricks are denied.
+ *        sip:PARENT@attacker.com and domain-suffix tricks are denied.
  *   D13: PSTN identities are normalized to E.164 before comparison, so a
  *        parent calling as "(555) 123-4567" is not rejected by string match.
  *

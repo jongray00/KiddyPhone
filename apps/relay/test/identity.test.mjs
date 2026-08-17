@@ -6,7 +6,7 @@ const HOST = 'acme.sip.signalwire.com';
 const wl = buildWhitelist(
   [
     { kind: 'pstn', value: '+15551234567' },
-    { kind: 'sip', user: 'BRIAN', host: HOST },
+    { kind: 'sip', user: 'PARENT', host: HOST },
   ],
   { region: 'US' }
 );
@@ -14,9 +14,9 @@ const wl = buildWhitelist(
 // ── parseSipUri ──────────────────────────────────────────────────────────────
 
 test('parseSipUri handles bare, angled, sips, params, ports', () => {
-  assert.deepEqual(parseSipUri(`sip:brian@${HOST}`), { user: 'brian', host: HOST });
-  assert.deepEqual(parseSipUri(`"Brian B" <sip:BRIAN@${HOST}>`), { user: 'BRIAN', host: HOST });
-  assert.deepEqual(parseSipUri(`sips:brian@${HOST}:5061;transport=tls?x=1`), { user: 'brian', host: HOST });
+  assert.deepEqual(parseSipUri(`sip:parent@${HOST}`), { user: 'parent', host: HOST });
+  assert.deepEqual(parseSipUri(`"Parent P" <sip:PARENT@${HOST}>`), { user: 'PARENT', host: HOST });
+  assert.deepEqual(parseSipUri(`sips:parent@${HOST}:5061;transport=tls?x=1`), { user: 'parent', host: HOST });
   assert.equal(parseSipUri('not a uri'), null);
   assert.equal(parseSipUri(null), null);
   assert.equal(parseSipUri(42), null);
@@ -26,10 +26,10 @@ test('parseSipUri handles bare, angled, sips, params, ports', () => {
 
 test('D12: the four adversarial addresses are all denied', () => {
   const adversarial = [
-    'sip:BRIAN@anything.com',                          // right user, wrong domain
-    'sip:BRIAN@attacker.com',                          //
-    `sip:BRIAN@${HOST}.attacker.com`,                  // suffix confusion, defeats endsWith
-    `sip:BRIAN@evil-${HOST}`,                          // prefix confusion
+    'sip:PARENT@anything.com',                          // right user, wrong domain
+    'sip:PARENT@attacker.com',                          //
+    `sip:PARENT@${HOST}.attacker.com`,                  // suffix confusion, defeats endsWith
+    `sip:PARENT@evil-${HOST}`,                          // prefix confusion
   ];
   for (const addr of adversarial) {
     assert.equal(isAllowed(addr, wl), false, `${addr} must be denied`);
@@ -37,9 +37,9 @@ test('D12: the four adversarial addresses are all denied', () => {
 });
 
 test('D12: the genuine SIP identity is admitted, case-insensitively', () => {
-  assert.equal(isAllowed(`sip:BRIAN@${HOST}`, wl), true);
-  assert.equal(isAllowed(`sip:brian@${HOST.toUpperCase()}`, wl), true);
-  assert.equal(isAllowed(`"Brian" <sip:Brian@${HOST}>`, wl), true);
+  assert.equal(isAllowed(`sip:PARENT@${HOST}`, wl), true);
+  assert.equal(isAllowed(`sip:parent@${HOST.toUpperCase()}`, wl), true);
+  assert.equal(isAllowed(`"Parent" <sip:Parent@${HOST}>`, wl), true);
 });
 
 // ── D13: ordinary caller-ID formats must be ACCEPTED ────────────────────────

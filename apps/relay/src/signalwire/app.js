@@ -22,6 +22,22 @@ import { CallRegistry, createDrain } from '../lifecycle.js';
 import { installProcessGuards } from '../process-guards.js';
 import { createHandlers, safeHangup } from './handler.js';
 
+/**
+ * The exact slice of config the handler consumes. A named seam because the
+ * inline hand-pick it replaces silently DROPPED the no-answer/busy action
+ * fields (caught live: voicemail mode declined instead of answering).
+ */
+export function handlerConfig(config) {
+  const {
+    childSipUri, connectDeadlineMs, dialTimeoutSec, region, outboundCallerId,
+    noAnswerAction, noAnswerMessage, busyAction, busyMessage,
+  } = config;
+  return {
+    childSipUri, connectDeadlineMs, dialTimeoutSec, region, outboundCallerId,
+    noAnswerAction, noAnswerMessage, busyAction, busyMessage,
+  };
+}
+
 export async function startApp({ config, logger = console, onOffer = null }) {
   const registry = new CallRegistry();
   const guard = new ConnectGuard();
@@ -44,13 +60,7 @@ export async function startApp({ config, logger = console, onOffer = null }) {
     guard,
     registry,
     logger,
-    config: {
-      childSipUri: config.childSipUri,
-      connectDeadlineMs: config.connectDeadlineMs,
-      dialTimeoutSec: config.dialTimeoutSec,
-      region: config.region,
-      outboundCallerId: config.outboundCallerId,
-    },
+    config: handlerConfig(config),
   });
 
   // No `host` option: the documented space-hostname value fails the websocket

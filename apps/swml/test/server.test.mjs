@@ -20,7 +20,7 @@ function makeHarness(overrides = {}) {
   const app = createApp({
     whitelist: buildWhitelist({
       pstn: [ALLOWED_FROM],
-      sip: [{ user: 'BRIAN', host: 'acme.sip.signalwire.com' }],
+      sip: [{ user: 'PARENT', host: 'acme.sip.signalwire.com' }],
       region: 'US',
     }),
     childUri: CHILD,
